@@ -83,6 +83,13 @@ const MainLayout = () => {
     subject: 'Dashboard'
   },
   {
+    name: 'Reportes',
+    icon: '👥',
+    path: '/app/reportes',
+    action: 'read',
+    subject: 'Reporte'
+  },
+  {
     name: 'Ventas',
     icon: '💰',
     path: '/app/ventas',
@@ -103,6 +110,7 @@ const MainLayout = () => {
     action: 'manage',
     subject: 'Usuario'
   },
+  /*
   {
     name: 'Roles',
     icon: '🔐',
@@ -110,6 +118,8 @@ const MainLayout = () => {
     action: 'manage',
     subject: 'Role'
   }
+  */
+
 ];
 
 

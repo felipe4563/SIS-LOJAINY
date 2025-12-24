@@ -1,12 +1,26 @@
-import express from "express";
-import { reporteProductosVendidos, reporteStockActual } from "../controllers/reporte.controller.js";
+import { Router } from 'express';
+import {
+  totalVendidoMes,
+  ventasPorUsuario,
+  ventasPorMetodoPago,
+  productosEnStock,
+  topProductosVendidos
+} from '../controllers/reporte.controller.js';
 
-const router = express.Router();
+import { authMiddleware } from '../middlewares/authMiddleware.js';
+import { initAbility } from '../middlewares/initAbility.js';
+import { checkAbility } from '../middlewares/checkAbility.js';
 
-// Productos vendidos entre fechas
-router.get("/productos-vendidos", reporteProductosVendidos);
+const router = Router();
 
-// Stock actual de productos
-router.get("/stock", reporteStockActual);
+router.use(authMiddleware);
+router.use(initAbility);
+
+// 📊 REPORTES
+router.get('/ventas-mes', checkAbility('read', 'Reporte'), totalVendidoMes);
+router.get('/ventas-usuario', checkAbility('read', 'Reporte'), ventasPorUsuario);
+router.get('/ventas-metodo', checkAbility('read', 'Reporte'), ventasPorMetodoPago);
+router.get('/stock', checkAbility('read', 'Reporte'), productosEnStock);
+router.get('/top-productos', checkAbility('read', 'Reporte'), topProductosVendidos);
 
 export default router;
