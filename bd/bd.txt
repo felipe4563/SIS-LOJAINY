@@ -1,0 +1,160 @@
+
+MariaDB [(none)]> use bd_lojainy;
+Database changed
+MariaDB [bd_lojainy]> show tables;
++----------------------+
+| Tables_in_bd_lojainy |
++----------------------+
+| categorias           |
+| clientes             |
+| color                |
+| detalle_venta        |
+| permisos             |
+| producto_imagenes    |
+| productos            |
+| rol_permisos         |
+| roles                |
+| tallas               |
+| usuarios             |
+| ventas               |
++----------------------+
+12 rows in set (0.001 sec)
+
+MariaDB [bd_lojainy]> describe categorias;
++--------------+--------------+------+-----+---------+----------------+
+| Field        | Type         | Null | Key | Default | Extra          |
++--------------+--------------+------+-----+---------+----------------+
+| id_categoria | int(11)      | NO   | PRI | NULL    | auto_increment |
+| nombre       | varchar(255) | NO   | UNI | NULL    |                |
++--------------+--------------+------+-----+---------+----------------+
+2 rows in set (0.017 sec)
+
+MariaDB [bd_lojainy]> describe clientes;
++----------------+--------------+------+-----+---------------------+----------------+
+| Field          | Type         | Null | Key | Default             | Extra          |
++----------------+--------------+------+-----+---------------------+----------------+
+| id_cliente     | int(11)      | NO   | PRI | NULL                | auto_increment |
+| ci             | varchar(20)  | NO   | UNI | NULL                |                |
+| nombre         | varchar(100) | NO   |     | NULL                |                |
+| apellido       | varchar(100) | NO   |     | NULL                |                |
+| celular        | varchar(20)  | YES  |     | NULL                |                |
+| fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
++----------------+--------------+------+-----+---------------------+----------------+
+6 rows in set (0.004 sec)
+
+MariaDB [bd_lojainy]> describe color;
++----------+-------------+------+-----+---------+----------------+
+| Field    | Type        | Null | Key | Default | Extra          |
++----------+-------------+------+-----+---------+----------------+
+| id_color | int(11)     | NO   | PRI | NULL    | auto_increment |
+| nombre   | varchar(20) | NO   | UNI | NULL    |                |
++----------+-------------+------+-----+---------+----------------+
+2 rows in set (0.010 sec)
+
+MariaDB [bd_lojainy]> describe detalle_venta;
++-------------+---------------+------+-----+---------+----------------+
+| Field       | Type          | Null | Key | Default | Extra          |
++-------------+---------------+------+-----+---------+----------------+
+| id_detalle  | int(11)       | NO   | PRI | NULL    | auto_increment |
+| id_venta    | int(11)       | NO   | MUL | NULL    |                |
+| id_producto | int(11)       | NO   | MUL | NULL    |                |
+| precio      | decimal(10,2) | YES  |     | NULL    |                |
+| cantidad    | int(11)       | NO   |     | 1       |                |
++-------------+---------------+------+-----+---------+----------------+
+5 rows in set (0.011 sec)
+
+MariaDB [bd_lojainy]> describe permisos;
++------------+-------------+------+-----+---------+----------------+
+| Field      | Type        | Null | Key | Default | Extra          |
++------------+-------------+------+-----+---------+----------------+
+| id_permiso | int(11)     | NO   | PRI | NULL    | auto_increment |
+| nombre     | varchar(50) | NO   | UNI | NULL    |                |
++------------+-------------+------+-----+---------+----------------+
+2 rows in set (0.011 sec)
+
+MariaDB [bd_lojainy]> describe producto_imagenes;
++----------------+--------------+------+-----+---------------------+----------------+
+| Field          | Type         | Null | Key | Default             | Extra          |
++----------------+--------------+------+-----+---------------------+----------------+
+| id_imagen      | int(11)      | NO   | PRI | NULL                | auto_increment |
+| id_producto    | int(11)      | NO   | MUL | NULL                |                |
+| imagen         | varchar(255) | NO   |     | NULL                |                |
+| es_principal   | tinyint(1)   | YES  |     | 0                   |                |
+| fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
++----------------+--------------+------+-----+---------------------+----------------+
+5 rows in set (0.004 sec)
+
+MariaDB [bd_lojainy]> describe productos;
++----------------+---------------+------+-----+---------------------+----------------+
+| Field          | Type          | Null | Key | Default             | Extra          |
++----------------+---------------+------+-----+---------------------+----------------+
+| id_producto    | int(11)       | NO   | PRI | NULL                | auto_increment |
+| precio         | decimal(10,2) | NO   |     | NULL                |                |
+| descripcion    | text          | YES  |     | NULL                |                |
+| stock          | int(11)       | YES  |     | 1                   |                |
+| codigo_qr      | varchar(50)   | YES  | UNI | NULL                |                |
+| fecha_registro | timestamp     | NO   |     | current_timestamp() |                |
+| id_categoria   | int(11)       | NO   | MUL | NULL                |                |
+| id_color       | int(11)       | NO   | MUL | NULL                |                |
+| id_talla       | int(11)       | NO   | MUL | NULL                |                |
++----------------+---------------+------+-----+---------------------+----------------+
+9 rows in set (0.015 sec)
+
+MariaDB [bd_lojainy]> describe rol_permisos;
++------------+---------+------+-----+---------+-------+
+| Field      | Type    | Null | Key | Default | Extra |
++------------+---------+------+-----+---------+-------+
+| id_rol     | int(11) | NO   | PRI | NULL    |       |
+| id_permiso | int(11) | NO   | PRI | NULL    |       |
++------------+---------+------+-----+---------+-------+
+2 rows in set (0.011 sec)
+
+MariaDB [bd_lojainy]> describe roles;
++--------+-------------+------+-----+---------+----------------+
+| Field  | Type        | Null | Key | Default | Extra          |
++--------+-------------+------+-----+---------+----------------+
+| id_rol | int(11)     | NO   | PRI | NULL    | auto_increment |
+| nombre | varchar(50) | NO   | UNI | NULL    |                |
++--------+-------------+------+-----+---------+----------------+
+2 rows in set (0.007 sec)
+
+MariaDB [bd_lojainy]> describe tallas;
++----------+-------------+------+-----+---------+----------------+
+| Field    | Type        | Null | Key | Default | Extra          |
++----------+-------------+------+-----+---------+----------------+
+| id_talla | int(11)     | NO   | PRI | NULL    | auto_increment |
+| nombre   | varchar(20) | NO   | UNI | NULL    |                |
++----------+-------------+------+-----+---------+----------------+
+2 rows in set (0.004 sec)
+
+MariaDB [bd_lojainy]> describe usuarios;
++----------------+--------------+------+-----+---------------------+----------------+
+| Field          | Type         | Null | Key | Default             | Extra          |
++----------------+--------------+------+-----+---------------------+----------------+
+| id_usuario     | int(11)      | NO   | PRI | NULL                | auto_increment |
+| nombre         | varchar(100) | NO   |     | NULL                |                |
+| apellido       | varchar(100) | YES  |     | NULL                |                |
+| usuario        | varchar(50)  | NO   | UNI | NULL                |                |
+| correo         | varchar(100) | YES  | UNI | NULL                |                |
+| ci             | varchar(20)  | YES  | UNI | NULL                |                |
+| password       | varchar(255) | NO   |     | NULL                |                |
+| id_rol         | int(11)      | NO   | MUL | NULL                |                |
+| activo         | tinyint(4)   | YES  |     | 1                   |                |
+| fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
++----------------+--------------+------+-----+---------------------+----------------+
+10 rows in set (0.014 sec)
+
+MariaDB [bd_lojainy]> describe ventas;
++-------------+-----------------------+------+-----+---------------------+----------------+
+| Field       | Type                  | Null | Key | Default             | Extra          |
++-------------+-----------------------+------+-----+---------------------+----------------+
+| id_venta    | int(11)               | NO   | PRI | NULL                | auto_increment |
+| id_usuario  | int(11)               | YES  | MUL | NULL                |                |
+| id_cliente  | int(11)               | YES  | MUL | NULL                |                |
+| fecha       | timestamp             | NO   |     | current_timestamp() |                |
+| metodo_pago | enum('efectivo','qr') | NO   |     | efectivo            |                |
+| total       | decimal(10,2)         | NO   |     | NULL                |                |
++-------------+-----------------------+------+-----+---------------------+----------------+
+6 rows in set (0.004 sec)
+
+MariaDB [bd_lojainy]>
