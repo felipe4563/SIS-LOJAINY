@@ -1,4 +1,3 @@
-
 MariaDB [(none)]> use bd_lojainy;
 Database changed
 MariaDB [bd_lojainy]> show tables;
@@ -27,7 +26,7 @@ MariaDB [bd_lojainy]> describe categorias;
 | id_categoria | int(11)      | NO   | PRI | NULL    | auto_increment |
 | nombre       | varchar(255) | NO   | UNI | NULL    |                |
 +--------------+--------------+------+-----+---------+----------------+
-2 rows in set (0.017 sec)
+2 rows in set (0.013 sec)
 
 MariaDB [bd_lojainy]> describe clientes;
 +----------------+--------------+------+-----+---------------------+----------------+
@@ -40,7 +39,7 @@ MariaDB [bd_lojainy]> describe clientes;
 | celular        | varchar(20)  | YES  |     | NULL                |                |
 | fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
 +----------------+--------------+------+-----+---------------------+----------------+
-6 rows in set (0.004 sec)
+6 rows in set (0.016 sec)
 
 MariaDB [bd_lojainy]> describe color;
 +----------+-------------+------+-----+---------+----------------+
@@ -49,7 +48,7 @@ MariaDB [bd_lojainy]> describe color;
 | id_color | int(11)     | NO   | PRI | NULL    | auto_increment |
 | nombre   | varchar(20) | NO   | UNI | NULL    |                |
 +----------+-------------+------+-----+---------+----------------+
-2 rows in set (0.010 sec)
+2 rows in set (0.015 sec)
 
 MariaDB [bd_lojainy]> describe detalle_venta;
 +-------------+---------------+------+-----+---------+----------------+
@@ -70,7 +69,7 @@ MariaDB [bd_lojainy]> describe permisos;
 | id_permiso | int(11)     | NO   | PRI | NULL    | auto_increment |
 | nombre     | varchar(50) | NO   | UNI | NULL    |                |
 +------------+-------------+------+-----+---------+----------------+
-2 rows in set (0.011 sec)
+2 rows in set (0.010 sec)
 
 MariaDB [bd_lojainy]> describe producto_imagenes;
 +----------------+--------------+------+-----+---------------------+----------------+
@@ -82,7 +81,7 @@ MariaDB [bd_lojainy]> describe producto_imagenes;
 | es_principal   | tinyint(1)   | YES  |     | 0                   |                |
 | fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
 +----------------+--------------+------+-----+---------------------+----------------+
-5 rows in set (0.004 sec)
+5 rows in set (0.013 sec)
 
 MariaDB [bd_lojainy]> describe productos;
 +----------------+---------------+------+-----+---------------------+----------------+
@@ -98,8 +97,7 @@ MariaDB [bd_lojainy]> describe productos;
 | id_color       | int(11)       | NO   | MUL | NULL                |                |
 | id_talla       | int(11)       | NO   | MUL | NULL                |                |
 +----------------+---------------+------+-----+---------------------+----------------+
-9 rows in set (0.015 sec)
-
+9 rows in set (0.010 sec)
 MariaDB [bd_lojainy]> describe rol_permisos;
 +------------+---------+------+-----+---------+-------+
 | Field      | Type    | Null | Key | Default | Extra |
@@ -107,7 +105,7 @@ MariaDB [bd_lojainy]> describe rol_permisos;
 | id_rol     | int(11) | NO   | PRI | NULL    |       |
 | id_permiso | int(11) | NO   | PRI | NULL    |       |
 +------------+---------+------+-----+---------+-------+
-2 rows in set (0.011 sec)
+2 rows in set (0.009 sec)
 
 MariaDB [bd_lojainy]> describe roles;
 +--------+-------------+------+-----+---------+----------------+
@@ -116,7 +114,7 @@ MariaDB [bd_lojainy]> describe roles;
 | id_rol | int(11)     | NO   | PRI | NULL    | auto_increment |
 | nombre | varchar(50) | NO   | UNI | NULL    |                |
 +--------+-------------+------+-----+---------+----------------+
-2 rows in set (0.007 sec)
+2 rows in set (0.010 sec)
 
 MariaDB [bd_lojainy]> describe tallas;
 +----------+-------------+------+-----+---------+----------------+
@@ -125,7 +123,7 @@ MariaDB [bd_lojainy]> describe tallas;
 | id_talla | int(11)     | NO   | PRI | NULL    | auto_increment |
 | nombre   | varchar(20) | NO   | UNI | NULL    |                |
 +----------+-------------+------+-----+---------+----------------+
-2 rows in set (0.004 sec)
+2 rows in set (0.014 sec)
 
 MariaDB [bd_lojainy]> describe usuarios;
 +----------------+--------------+------+-----+---------------------+----------------+
@@ -142,7 +140,7 @@ MariaDB [bd_lojainy]> describe usuarios;
 | activo         | tinyint(4)   | YES  |     | 1                   |                |
 | fecha_registro | timestamp    | NO   |     | current_timestamp() |                |
 +----------------+--------------+------+-----+---------------------+----------------+
-10 rows in set (0.014 sec)
+10 rows in set (0.010 sec)
 
 MariaDB [bd_lojainy]> describe ventas;
 +-------------+-----------------------+------+-----+---------------------+----------------+
@@ -155,6 +153,6 @@ MariaDB [bd_lojainy]> describe ventas;
 | metodo_pago | enum('efectivo','qr') | NO   |     | efectivo            |                |
 | total       | decimal(10,2)         | NO   |     | NULL                |                |
 +-------------+-----------------------+------+-----+---------------------+----------------+
-6 rows in set (0.004 sec)
+6 rows in set (0.023 sec)
 
 MariaDB [bd_lojainy]>

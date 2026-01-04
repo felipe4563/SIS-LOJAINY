@@ -4,38 +4,51 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
-import { uploadQR, uploadProductos } from "../config/upload.js";
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================
-// LISTAR PRODUCTOS CON IMAGEN PRINCIPAL
+// LISTAR PRODUCTOS CON IMAGEN PRINCIPAL Y MARCA
 // ==========================
 export const listarProductos = async (req, res) => {
   try {
+    // Traemos todos los productos con sus relaciones
     const [productos] = await db.query(`
       SELECT 
         p.*,
-        p.codigo_qr,
         c.nombre AS categoria,
         co.nombre AS color,
         t.nombre AS talla,
-        (
-          SELECT imagen 
-          FROM producto_imagenes pi 
-          WHERE pi.id_producto = p.id_producto 
-          ORDER BY es_principal DESC
-          LIMIT 1
-        ) AS imagen_principal
+        m.nombre AS marca
       FROM productos p
       INNER JOIN categorias c ON p.id_categoria = c.id_categoria
       INNER JOIN color co ON p.id_color = co.id_color
       INNER JOIN tallas t ON p.id_talla = t.id_talla
+      INNER JOIN marcas m ON p.id_marca = m.id_marca
       ORDER BY p.id_producto DESC
     `);
-    res.json(productos);
+
+    // Traemos todas las imágenes de todos los productos
+    const [imagenes] = await db.query(`
+      SELECT id_producto, imagen, es_principal 
+      FROM producto_imagenes
+      ORDER BY id_producto, es_principal DESC
+    `);
+
+    // Agrupamos las imágenes por producto
+    const productosConImagenes = productos.map(prod => {
+      const imgs = imagenes.filter(img => img.id_producto === prod.id_producto);
+      return {
+        ...prod,
+        imagen_principal: imgs.length ? imgs[0].imagen : null, // primera imagen como principal
+        imagenes: imgs.map(img => img.imagen) // todas las imágenes en un array
+      };
+    });
+
+    res.json(productosConImagenes);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al listar productos" });
@@ -49,7 +62,13 @@ export const listarProductos = async (req, res) => {
 export const obtenerProducto = async (req, res) => {
   const { id_producto } = req.params;
   try {
-    const [rows] = await db.query("SELECT * FROM productos WHERE id_producto = ?", [id_producto]);
+    const [rows] = await db.query(`
+      SELECT p.*, m.nombre AS marca
+      FROM productos p
+      INNER JOIN marcas m ON p.id_marca = m.id_marca
+      WHERE p.id_producto = ?
+    `, [id_producto]);
+
     if (rows.length === 0) return res.status(404).json({ message: "Producto no encontrado" });
     res.json(rows[0]);
   } catch (error) {
@@ -59,17 +78,17 @@ export const obtenerProducto = async (req, res) => {
 };
 
 // ==========================
-// CREAR PRODUCTO CON QR Y MÚLTIPLES IMÁGENES
+// CREAR PRODUCTO CON MARCA, QR Y MÚLTIPLES IMÁGENES
 // ==========================
 export const crearProducto = async (req, res) => {
-  const { id_categoria, id_color, id_talla, precio, descripcion, stock = 1 } = req.body;
+  const { id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock = 1 } = req.body;
 
   try {
     // 1️⃣ Insertar producto
     const [result] = await db.query(
-      `INSERT INTO productos (id_categoria, id_color, id_talla, precio, descripcion, stock)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id_categoria, id_color, id_talla, precio, descripcion, stock]
+      `INSERT INTO productos (id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock]
     );
     const id_producto = result.insertId;
 
@@ -101,7 +120,6 @@ export const crearProducto = async (req, res) => {
         [imagenesValues]
       );
 
-      // Mover archivos a carpeta de productos
       req.files.forEach(file => {
         const oldPath = file.path;
         const newPath = path.join(productosDir, file.filename);
@@ -121,7 +139,7 @@ export const crearProducto = async (req, res) => {
 // ==========================
 export const actualizarProducto = async (req, res) => {
   const { id_producto } = req.params;
-  const { id_categoria, id_color, id_talla, precio, descripcion, stock } = req.body;
+  const { id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock } = req.body;
 
   try {
     await db.query(
@@ -129,11 +147,12 @@ export const actualizarProducto = async (req, res) => {
         id_categoria = ?,
         id_color = ?,
         id_talla = ?,
+        id_marca = ?,
         precio = ?,
         descripcion = ?,
         stock = ?
       WHERE id_producto = ?`,
-      [id_categoria, id_color, id_talla, precio, descripcion, stock, id_producto]
+      [id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock, id_producto]
     );
 
     // Guardar nuevas imágenes

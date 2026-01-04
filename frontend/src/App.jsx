@@ -12,20 +12,10 @@ import Usuarios from "./pages/Usuarios";
 import Roles from "./pages/Roles";
 import Ventas from "./pages/Ventas";
 import Reportes from "./pages/Reportes";
+import Atributos from "./pages/Atributos";
 
 // 🔐 Ruta protegida con CASL
-const ProtectedRoute = ({ action, subject, children }) => {
-  const { usuario } = useContext(AuthContext);
-  const ability = useContext(AbilityContext);
-
-  if (!usuario) return <Navigate to="/login" replace />;
-
-  if (!ability.can(action, subject)) {
-    return <Navigate to="/app" replace />;
-  }
-
-  return children;
-};
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   const { usuario } = useContext(AuthContext);
@@ -105,8 +95,22 @@ function App() {
             </ProtectedRoute>
           }
         />
-      </Route>
+        {/* Atributos */}
 
+        <Route
+          path="atributos"
+          element={
+            <ProtectedRoute any={[
+              { action: "manage", subject: "Categoria" },
+              { action: "manage", subject: "Talla" },
+              { action: "manage", subject: "Color" },
+              { action: "manage", subject: "Marca" },
+            ]}>
+              <Atributos />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
       {/* Fallback */}
       <Route
         path="*"

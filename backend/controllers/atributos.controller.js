@@ -3,7 +3,6 @@ import db from "../config/db.js";
 // ==========================
 // CATEGORIAS / TALLAS / COLORES
 // ==========================
-
 // ==========================
 // LISTAR
 // ==========================
@@ -80,3 +79,4 @@ export const eliminar = (tabla, pk, subject) => async (req, res) => {
     res.status(500).json({ message: `Error al eliminar ${subject}` });
   }
 };
+

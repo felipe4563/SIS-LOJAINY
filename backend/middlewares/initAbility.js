@@ -20,7 +20,8 @@ export const initAbility = (req, res, next) => {
       usuarios: "Usuario",
       roles: "Rol",
       dashboard: "Dashboard",
-      reportes: "Reporte"
+      reportes: "Reporte",
+      marcas: "Marca"
     };
 
     permisos.forEach(p => {

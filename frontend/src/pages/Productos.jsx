@@ -1,6 +1,6 @@
 import { useEffect, useState, useContext, useRef } from "react";
 import { listarProductos, eliminarProducto } from "../services/producto";
-import { listarCategorias, listarTallas, listarColores } from "../services/atributos";
+import { listarCategorias, listarTallas, listarColores, listarMarcas } from "../services/atributos";
 import { AbilityContext } from "../context/AbilityContext";
 import FormularioProducto from "../pages/Producto/FormularioProducto";
 import EtiquetaQR from "../components/EtiquetaQr";
@@ -16,16 +16,17 @@ const Productos = () => {
   const [categorias, setCategorias] = useState([]);
   const [tallas, setTallas] = useState([]);
   const [colores, setColores] = useState([]);
+  const [marcas, setMarcas] = useState([]);
 
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [filtroTalla, setFiltroTalla] = useState("");
   const [filtroColor, setFiltroColor] = useState("");
+  const [filtroMarca, setFiltroMarca] = useState("");
   const [filtroStock, setFiltroStock] = useState(false);
 
   const ability = useContext(AbilityContext);
   const printRef = useRef();
 
-  // Configurar react-to-print
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     pageStyle: `
@@ -45,6 +46,7 @@ const Productos = () => {
     setCategorias(await listarCategorias());
     setTallas(await listarTallas());
     setColores(await listarColores());
+    setMarcas(await listarMarcas());
   };
 
   useEffect(() => {
@@ -81,9 +83,7 @@ const Productos = () => {
           className="border p-2 rounded"
         >
           <option value="">Todas las categorías</option>
-          {categorias.map(c => (
-            <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>
-          ))}
+          {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>)}
         </select>
 
         <select
@@ -92,9 +92,7 @@ const Productos = () => {
           className="border p-2 rounded"
         >
           <option value="">Todas las tallas</option>
-          {tallas.map(t => (
-            <option key={t.id_talla} value={t.id_talla}>{t.nombre}</option>
-          ))}
+          {tallas.map(t => <option key={t.id_talla} value={t.id_talla}>{t.nombre}</option>)}
         </select>
 
         <select
@@ -103,9 +101,16 @@ const Productos = () => {
           className="border p-2 rounded"
         >
           <option value="">Todos los colores</option>
-          {colores.map(c => (
-            <option key={c.id_color} value={c.id_color}>{c.nombre}</option>
-          ))}
+          {colores.map(c => <option key={c.id_color} value={c.id_color}>{c.nombre}</option>)}
+        </select>
+
+        <select
+          value={filtroMarca}
+          onChange={(e) => setFiltroMarca(e.target.value)}
+          className="border p-2 rounded"
+        >
+          <option value="">Todas las marcas</option>
+          {marcas.map(m => <option key={m.id_marca} value={m.id_marca}>{m.nombre}</option>)}
         </select>
 
         <label className="flex items-center gap-2">
@@ -123,11 +128,12 @@ const Productos = () => {
         <table className="w-full border border-gray-300">
           <thead className="bg-gray-100">
             <tr>
-              <th className="border border-gray-300 p-2 text-left">Imagen</th>
+              <th className="border border-gray-300 p-2 text-left">Imágenes</th>
               <th className="border border-gray-300 p-2 text-left">Descripción</th>
               <th className="border border-gray-300 p-2 text-left">Categoría</th>
               <th className="border border-gray-300 p-2 text-left">Talla</th>
               <th className="border border-gray-300 p-2 text-left">Color</th>
+              <th className="border border-gray-300 p-2 text-left">Marca</th>
               <th className="border border-gray-300 p-2 text-left">Precio</th>
               <th className="border border-gray-300 p-2 text-left">Stock</th>
               <th className="border border-gray-300 p-2 text-left">Acciones</th>
@@ -139,14 +145,16 @@ const Productos = () => {
                 (filtroCategoria === "" || p.id_categoria === parseInt(filtroCategoria)) &&
                 (filtroTalla === "" || p.id_talla === parseInt(filtroTalla)) &&
                 (filtroColor === "" || p.id_color === parseInt(filtroColor)) &&
+                (filtroMarca === "" || p.id_marca === parseInt(filtroMarca)) &&
                 (!filtroStock || p.stock > 0)
               )
               .map(p => (
                 <tr key={p.id_producto} className="hover:bg-gray-50">
-                  <td className="border border-gray-300 p-2">
-                    {p.imagen_principal && (
+                  <td className="border border-gray-300 p-2 flex flex-wrap gap-1">
+                    {p.imagenes?.map((img, i) => (
                       <img
-                        src={`${import.meta.env.VITE_APP_DOMAIN}/uploads/productos/${p.imagen_principal}`}
+                        key={i}
+                        src={`${import.meta.env.VITE_APP_DOMAIN}/uploads/productos/${img}`}
                         alt={p.descripcion}
                         className="w-16 h-16 object-cover rounded"
                         onError={(e) => {
@@ -154,12 +162,13 @@ const Productos = () => {
                           e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%23f0f0f0'/%3E%3Ctext x='32' y='32' text-anchor='middle' dy='.3em' font-size='8'%3ESin imagen%3C/text%3E%3C/svg%3E";
                         }}
                       />
-                    )}
+                    ))}
                   </td>
                   <td className="border border-gray-300 p-2">{p.descripcion}</td>
                   <td className="border border-gray-300 p-2">{p.categoria}</td>
                   <td className="border border-gray-300 p-2">{p.talla}</td>
                   <td className="border border-gray-300 p-2">{p.color}</td>
+                  <td className="border border-gray-300 p-2">{p.marca}</td>
                   <td className="border border-gray-300 p-2 font-medium">Bs {parseFloat(p.precio).toFixed(2)}</td>
                   <td className="border border-gray-300 p-2 font-medium">{p.stock}</td>
                   <td className="border border-gray-300 p-2">

@@ -110,6 +110,17 @@ const MainLayout = () => {
     action: 'manage',
     subject: 'Usuario'
   },
+  {
+  name: 'Atributos',
+  icon: '🏷️',
+  path: '/app/atributos',
+  any: [
+    { action: 'manage', subject: 'Categoria' },
+    { action: 'manage', subject: 'Talla' },
+    { action: 'manage', subject: 'Color' },
+    { action: 'manage', subject: 'Marca' }
+  ]
+  },
   /*
   {
     name: 'Roles',
@@ -121,12 +132,16 @@ const MainLayout = () => {
   */
 
 ];
-
-
   // 🔥 FILTRADO SIMPLE Y LIMPIO - CASL DECIDE TODO
-  const menuFiltrado = menuItems.filter(item =>
-  ability.can(item.action, item.subject)
-);
+  // MainLayout.jsx - Actualizar la función de filtrado
+const menuFiltrado = menuItems.filter(item => {
+  if (item.any && Array.isArray(item.any)) {
+    // Basta que tenga alguno de los permisos
+    return item.any.some(p => ability.can(p.action, p.subject));
+  }
+  // Caso normal: action/subject
+  return ability.can(item.action, item.subject);
+});
 
 
   // Verificar si la ruta está activa

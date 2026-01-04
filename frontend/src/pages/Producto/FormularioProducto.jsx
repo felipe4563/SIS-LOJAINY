@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import {
   listarCategorias,
   listarColores,
-  listarTallas
+  listarTallas,
+  listarMarcas
 } from "../../services/atributos";
 import { crearProducto, actualizarProducto } from "../../services/producto";
 
@@ -10,11 +11,13 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
   const [categorias, setCategorias] = useState([]);
   const [colores, setColores] = useState([]);
   const [tallas, setTallas] = useState([]);
+  const [marcas, setMarcas] = useState([]);
 
   const [form, setForm] = useState({
     id_categoria: "",
     id_color: "",
     id_talla: "",
+    id_marca: "",
     precio: "",
     descripcion: "",
     stock: 1
@@ -23,15 +26,19 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
   const [imagenes, setImagenes] = useState([]);
 
   useEffect(() => {
+    // Cargar atributos
     listarCategorias().then(setCategorias);
     listarColores().then(setColores);
     listarTallas().then(setTallas);
+    listarMarcas().then(setMarcas);
 
+    // Si estamos editando, rellenar form
     if (producto) {
       setForm({
         id_categoria: producto.id_categoria,
         id_color: producto.id_color,
         id_talla: producto.id_talla,
+        id_marca: producto.id_marca,
         precio: producto.precio,
         descripcion: producto.descripcion,
         stock: producto.stock
@@ -50,14 +57,18 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     imagenes.forEach(img => fd.append("imagenes", img));
 
-    if (producto) {
-      await actualizarProducto(producto.id_producto, fd);
-    } else {
-      await crearProducto(fd);
-    }
+    try {
+      if (producto) {
+        await actualizarProducto(producto.id_producto, fd);
+      } else {
+        await crearProducto(fd);
+      }
 
-    onSuccess();
-    onClose();
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error("Error al guardar producto:", err);
+    }
   };
 
   return (
@@ -70,21 +81,55 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
           {producto ? "Editar Producto" : "Nuevo Producto"}
         </h3>
 
-        <select name="id_categoria" onChange={handleChange} value={form.id_categoria} required className="w-full mb-2 border p-2">
+        {/* Categoría */}
+        <select
+          name="id_categoria"
+          onChange={handleChange}
+          value={form.id_categoria}
+          required
+          className="w-full mb-2 border p-2"
+        >
           <option value="">Categoría</option>
           {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nombre}</option>)}
         </select>
 
-        <select name="id_color" onChange={handleChange} value={form.id_color} required className="w-full mb-2 border p-2">
+        {/* Color */}
+        <select
+          name="id_color"
+          onChange={handleChange}
+          value={form.id_color}
+          required
+          className="w-full mb-2 border p-2"
+        >
           <option value="">Color</option>
           {colores.map(c => <option key={c.id_color} value={c.id_color}>{c.nombre}</option>)}
         </select>
 
-        <select name="id_talla" onChange={handleChange} value={form.id_talla} required className="w-full mb-2 border p-2">
+        {/* Talla */}
+        <select
+          name="id_talla"
+          onChange={handleChange}
+          value={form.id_talla}
+          required
+          className="w-full mb-2 border p-2"
+        >
           <option value="">Talla</option>
           {tallas.map(t => <option key={t.id_talla} value={t.id_talla}>{t.nombre}</option>)}
         </select>
 
+        {/* Marca */}
+        <select
+          name="id_marca"
+          onChange={handleChange}
+          value={form.id_marca}
+          required
+          className="w-full mb-2 border p-2"
+        >
+          <option value="">Marca</option>
+          {marcas.map(m => <option key={m.id_marca} value={m.id_marca}>{m.nombre}</option>)}
+        </select>
+
+        {/* Descripción */}
         <input
           name="descripcion"
           placeholder="Descripción"
@@ -94,6 +139,7 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
           required
         />
 
+        {/* Precio */}
         <input
           name="precio"
           type="number"
@@ -105,6 +151,7 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
           required
         />
 
+        {/* Stock */}
         <input
           name="stock"
           type="number"
@@ -114,6 +161,7 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
           className="w-full mb-2 border p-2"
         />
 
+        {/* Imágenes */}
         <input
           type="file"
           multiple
@@ -121,6 +169,7 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
           className="w-full mb-4"
         />
 
+        {/* Botones */}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-4 py-2 border">
             Cancelar

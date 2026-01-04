@@ -31,4 +31,12 @@ router.post("/colores", checkAbility("manage", "Color"), ctrl.crear("color", ["n
 router.put("/colores/:id", checkAbility("manage", "Color"), ctrl.actualizar("color", "id_color", ["nombre"], "Color"));
 router.delete("/colores/:id", checkAbility("manage", "Color"), ctrl.eliminar("color", "id_color", "Color"));
 
+// MARCAS
+
+router.get("/marcas", checkAbility("manage", "Marca"), ctrl.listar("marcas", "Marca"));
+router.get("/marcas/:id", checkAbility("manage", "Marca"), ctrl.obtener("marcas", "id_marca", "Marca"));
+router.post("/marcas", checkAbility("manage", "Marca"), ctrl.crear("marcas", ["nombre"], "Marca"));
+router.put("/marcas/:id", checkAbility("manage", "Marca"), ctrl.actualizar("marcas", "id_marca", ["nombre"], "Marca"));
+router.delete("/marcas/:id", checkAbility("manage", "Marca"), ctrl.eliminar("marcas", "id_marca", "Marca"));
+
 export default router;
