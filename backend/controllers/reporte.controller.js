@@ -9,6 +9,12 @@ export const reporteVentas = async (req, res) => {
       fecha_fin
     } = req.query;
 
+    if (!fecha_inicio || !fecha_fin) {
+      return res.status(400).json({
+        message: 'fecha_inicio y fecha_fin son obligatorios'
+      });
+    }
+
     const [rows] = await db.query(
       `
       SELECT
@@ -17,8 +23,17 @@ export const reporteVentas = async (req, res) => {
         v.metodo_pago,
         v.total,
         CONCAT(u.nombre, ' ', u.apellido) AS vendedor,
-        p.descripcion AS producto,
-        dv.precio
+
+        GROUP_CONCAT(
+          CONCAT(
+            p.id_producto, '|',
+            REPLACE(p.descripcion, '|', ''), '|',
+            dv.precio, '|',
+            dv.cantidad
+          )
+          SEPARATOR ';;'
+        ) AS productos
+
       FROM ventas v
       INNER JOIN usuarios u ON v.id_usuario = u.id_usuario
       INNER JOIN detalle_venta dv ON v.id_venta = dv.id_venta
@@ -28,7 +43,14 @@ export const reporteVentas = async (req, res) => {
       AND
         (? IS NULL OR v.id_usuario = ?)
       AND
-        (DATE(v.fecha) BETWEEN ? AND ?)
+        DATE(v.fecha) BETWEEN ? AND ?
+      GROUP BY
+        v.id_venta,
+        v.fecha,
+        v.metodo_pago,
+        v.total,
+        u.nombre,
+        u.apellido
       ORDER BY v.fecha DESC
       `,
       [
@@ -38,9 +60,28 @@ export const reporteVentas = async (req, res) => {
       ]
     );
 
-    res.json(rows);
+    // 🧠 Convertir productos a JSON real
+    const data = rows.map(v => ({
+      ...v,
+      productos: v.productos
+        ? v.productos.split(';;').map(item => {
+            const [id_producto, producto, precio, cantidad] = item.split('|');
+            return {
+              id_producto: Number(id_producto),
+              producto,
+              precio: Number(precio),
+              cantidad: Number(cantidad)
+            };
+          })
+        : []
+    }));
+
+    res.json(data);
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error al generar reporte' });
+    console.error('Error reporteVentas:', error);
+    res.status(500).json({
+      message: 'Error al generar reporte de ventas'
+    });
   }
 };

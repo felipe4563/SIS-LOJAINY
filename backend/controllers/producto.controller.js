@@ -139,9 +139,19 @@ export const crearProducto = async (req, res) => {
 // ==========================
 export const actualizarProducto = async (req, res) => {
   const { id_producto } = req.params;
-  const { id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock } = req.body;
+  const { 
+    id_categoria, 
+    id_color, 
+    id_talla, 
+    id_marca, 
+    precio, 
+    descripcion, 
+    stock,
+    imagenes_a_eliminar  // ← Nuevo campo para recibir imágenes a eliminar
+  } = req.body;
 
   try {
+    // 1. Actualizar datos básicos del producto
     await db.query(
       `UPDATE productos SET
         id_categoria = ?,
@@ -155,34 +165,114 @@ export const actualizarProducto = async (req, res) => {
       [id_categoria, id_color, id_talla, id_marca, precio, descripcion, stock, id_producto]
     );
 
-    // Guardar nuevas imágenes
-    if (req.files && req.files.length > 0) {
-      const productosDir = path.join(__dirname, "../uploads/productos");
-      if (!fs.existsSync(productosDir)) fs.mkdirSync(productosDir, { recursive: true });
+    // 2. Eliminar imágenes marcadas para eliminar
+    if (imagenes_a_eliminar && imagenes_a_eliminar.trim() !== '') {
+      try {
+        const imagenesEliminar = JSON.parse(imagenes_a_eliminar);
+        
+        console.log(`Eliminando ${imagenesEliminar.length} imágenes:`, imagenesEliminar);
+        
+        for (const imgNombre of imagenesEliminar) {
+          if (imgNombre && typeof imgNombre === 'string') {
+            // Eliminar de la base de datos
+            await db.query(
+              "DELETE FROM producto_imagenes WHERE id_producto = ? AND imagen = ?", 
+              [id_producto, imgNombre]
+            );
+            
+            // Eliminar archivo físico
+            const imgPath = path.join(__dirname, "../uploads/productos", imgNombre);
+            if (fs.existsSync(imgPath)) {
+              fs.unlinkSync(imgPath);
+              console.log(`Imagen eliminada: ${imgNombre}`);
+            } else {
+              console.log(`Imagen no encontrada: ${imgNombre}`);
+            }
+          }
+        }
+      } catch (parseError) {
+        console.error("Error al parsear imagenes_a_eliminar:", parseError);
+      }
+    }
 
-      const imagenesValues = req.files.map((file) => [
+    // 3. Guardar nuevas imágenes
+    if (req.files && req.files.length > 0) {
+      console.log(`Agregando ${req.files.length} nuevas imágenes`);
+      
+      const productosDir = path.join(__dirname, "../uploads/productos");
+      if (!fs.existsSync(productosDir)) {
+        fs.mkdirSync(productosDir, { recursive: true });
+      }
+
+      // Verificar si ya hay imágenes principales
+      const [imagenesExistentes] = await db.query(
+        "SELECT COUNT(*) as count FROM producto_imagenes WHERE id_producto = ? AND es_principal = 1",
+        [id_producto]
+      );
+      
+      const tienePrincipal = imagenesExistentes[0].count > 0;
+      const esPrincipal = tienePrincipal ? 0 : 1; // Si no tiene principal, la primera nueva será principal
+
+      const imagenesValues = req.files.map((file, index) => [
         id_producto,
         file.filename,
-        0
+        index === 0 && !tienePrincipal ? 1 : 0 // Solo principal si es la primera y no hay principal
       ]);
 
-      await db.query(
-        `INSERT INTO producto_imagenes (id_producto, imagen, es_principal)
-         VALUES ?`,
-        [imagenesValues]
-      );
+      // Insertar nuevas imágenes
+      if (imagenesValues.length > 0) {
+        await db.query(
+          `INSERT INTO producto_imagenes (id_producto, imagen, es_principal)
+           VALUES ?`,
+          [imagenesValues]
+        );
+      }
 
+      // Mover archivos a la carpeta definitiva
       req.files.forEach(file => {
         const oldPath = file.path;
         const newPath = path.join(productosDir, file.filename);
-        fs.renameSync(oldPath, newPath);
+        
+        if (fs.existsSync(oldPath)) {
+          fs.renameSync(oldPath, newPath);
+          console.log(`Imagen movida: ${file.filename}`);
+        }
       });
     }
 
-    res.json({ message: "Producto actualizado correctamente" });
+    // 4. Verificar si queda al menos una imagen principal después de las eliminaciones
+    const [imagenesRestantes] = await db.query(
+      "SELECT COUNT(*) as count FROM producto_imagenes WHERE id_producto = ? AND es_principal = 1",
+      [id_producto]
+    );
+    
+    if (imagenesRestantes[0].count === 0) {
+      // Si no hay imagen principal, establecer la primera imagen como principal
+      const [primeraImagen] = await db.query(
+        "SELECT imagen FROM producto_imagenes WHERE id_producto = ? ORDER BY id_producto_imagen ASC LIMIT 1",
+        [id_producto]
+      );
+      
+      if (primeraImagen.length > 0) {
+        await db.query(
+          "UPDATE producto_imagenes SET es_principal = 1 WHERE id_producto = ? AND imagen = ?",
+          [id_producto, primeraImagen[0].imagen]
+        );
+        console.log(`Establecida ${primeraImagen[0].imagen} como imagen principal`);
+      }
+    }
+
+    res.json({ 
+      message: "Producto actualizado correctamente",
+      imagenesEliminadas: imagenes_a_eliminar ? JSON.parse(imagenes_a_eliminar).length : 0,
+      nuevasImagenes: req.files ? req.files.length : 0
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al actualizar producto" });
+    console.error("Error al actualizar producto:", error);
+    res.status(500).json({ 
+      message: "Error al actualizar producto",
+      error: error.message 
+    });
   }
 };
 

@@ -19,7 +19,7 @@ dotenv.config();
 const app = express();
 
 const allowedOrigins = [
-  'http://192.168.1.6:5173',
+  'http://localhost:5173',
   'https://boutique.lojainy.com',  
 ];
 
