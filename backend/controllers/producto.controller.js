@@ -139,15 +139,15 @@ export const crearProducto = async (req, res) => {
 // ==========================
 export const actualizarProducto = async (req, res) => {
   const { id_producto } = req.params;
-  const { 
-    id_categoria, 
-    id_color, 
-    id_talla, 
-    id_marca, 
-    precio, 
-    descripcion, 
+  const {
+    id_categoria,
+    id_color,
+    id_talla,
+    id_marca,
+    precio,
+    descripcion,
     stock,
-    imagenes_a_eliminar  // ← Nuevo campo para recibir imágenes a eliminar
+    imagenes_a_eliminar
   } = req.body;
 
   try {
@@ -169,17 +169,17 @@ export const actualizarProducto = async (req, res) => {
     if (imagenes_a_eliminar && imagenes_a_eliminar.trim() !== '') {
       try {
         const imagenesEliminar = JSON.parse(imagenes_a_eliminar);
-        
+
         console.log(`Eliminando ${imagenesEliminar.length} imágenes:`, imagenesEliminar);
-        
+
         for (const imgNombre of imagenesEliminar) {
           if (imgNombre && typeof imgNombre === 'string') {
             // Eliminar de la base de datos
             await db.query(
-              "DELETE FROM producto_imagenes WHERE id_producto = ? AND imagen = ?", 
+              "DELETE FROM producto_imagenes WHERE id_producto = ? AND imagen = ?",
               [id_producto, imgNombre]
             );
-            
+
             // Eliminar archivo físico
             const imgPath = path.join(__dirname, "../uploads/productos", imgNombre);
             if (fs.existsSync(imgPath)) {
@@ -198,7 +198,7 @@ export const actualizarProducto = async (req, res) => {
     // 3. Guardar nuevas imágenes
     if (req.files && req.files.length > 0) {
       console.log(`Agregando ${req.files.length} nuevas imágenes`);
-      
+
       const productosDir = path.join(__dirname, "../uploads/productos");
       if (!fs.existsSync(productosDir)) {
         fs.mkdirSync(productosDir, { recursive: true });
@@ -209,21 +209,19 @@ export const actualizarProducto = async (req, res) => {
         "SELECT COUNT(*) as count FROM producto_imagenes WHERE id_producto = ? AND es_principal = 1",
         [id_producto]
       );
-      
+
       const tienePrincipal = imagenesExistentes[0].count > 0;
-      const esPrincipal = tienePrincipal ? 0 : 1; // Si no tiene principal, la primera nueva será principal
 
       const imagenesValues = req.files.map((file, index) => [
         id_producto,
         file.filename,
-        index === 0 && !tienePrincipal ? 1 : 0 // Solo principal si es la primera y no hay principal
+        index === 0 && !tienePrincipal ? 1 : 0
       ]);
 
       // Insertar nuevas imágenes
       if (imagenesValues.length > 0) {
         await db.query(
-          `INSERT INTO producto_imagenes (id_producto, imagen, es_principal)
-           VALUES ?`,
+          `INSERT INTO producto_imagenes (id_producto, imagen, es_principal) VALUES ?`,
           [imagenesValues]
         );
       }
@@ -232,7 +230,7 @@ export const actualizarProducto = async (req, res) => {
       req.files.forEach(file => {
         const oldPath = file.path;
         const newPath = path.join(productosDir, file.filename);
-        
+
         if (fs.existsSync(oldPath)) {
           fs.renameSync(oldPath, newPath);
           console.log(`Imagen movida: ${file.filename}`);
@@ -245,14 +243,15 @@ export const actualizarProducto = async (req, res) => {
       "SELECT COUNT(*) as count FROM producto_imagenes WHERE id_producto = ? AND es_principal = 1",
       [id_producto]
     );
-    
+
     if (imagenesRestantes[0].count === 0) {
       // Si no hay imagen principal, establecer la primera imagen como principal
       const [primeraImagen] = await db.query(
-        "SELECT imagen FROM producto_imagenes WHERE id_producto = ? ORDER BY id_producto_imagen ASC LIMIT 1",
+        // ✅ Corregido: id_imagen en lugar de id_producto_imagen
+        "SELECT imagen FROM producto_imagenes WHERE id_producto = ? ORDER BY id_imagen ASC LIMIT 1",
         [id_producto]
       );
-      
+
       if (primeraImagen.length > 0) {
         await db.query(
           "UPDATE producto_imagenes SET es_principal = 1 WHERE id_producto = ? AND imagen = ?",
@@ -262,16 +261,17 @@ export const actualizarProducto = async (req, res) => {
       }
     }
 
-    res.json({ 
+    res.json({
       message: "Producto actualizado correctamente",
       imagenesEliminadas: imagenes_a_eliminar ? JSON.parse(imagenes_a_eliminar).length : 0,
       nuevasImagenes: req.files ? req.files.length : 0
     });
+
   } catch (error) {
     console.error("Error al actualizar producto:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error al actualizar producto",
-      error: error.message 
+      error: error.message
     });
   }
 };
