@@ -188,4 +188,53 @@ export const obtenerVenta = async (req, res) => {
   }
 };
 
+/**
+ * Eliminar venta (y restaurar stock)
+ */
+export const eliminarVenta = async (req, res) => {
+  const { id } = req.params;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
 
+    const id_usuario = req.user.id_usuario;
+    const esAdmin = req.user.rol === 'administrador';
+
+    // 1. Verificar si la venta existe
+    const [ventas] = await conn.query('SELECT id_usuario FROM ventas WHERE id_venta = ?', [id]);
+    if (ventas.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Venta no encontrada' });
+    }
+
+    // CONTROL DE ACCESO
+    if (!esAdmin && ventas[0].id_usuario !== id_usuario) {
+      await conn.rollback();
+      return res.status(403).json({ message: 'No tienes permiso para eliminar esta venta' });
+    }
+
+    // 2. Obtener detalles para restaurar el stock
+    const [detalles] = await conn.query('SELECT id_producto, cantidad FROM detalle_venta WHERE id_venta = ?', [id]);
+
+    // 3. Restaurar stock de cada producto
+    for (let item of detalles) {
+      await conn.query(
+        'UPDATE productos SET stock = stock + ? WHERE id_producto = ?',
+        [item.cantidad, item.id_producto]
+      );
+    }
+
+    // 4. Eliminar detalles y luego la venta
+    await conn.query('DELETE FROM detalle_venta WHERE id_venta = ?', [id]);
+    await conn.query('DELETE FROM ventas WHERE id_venta = ?', [id]);
+
+    await conn.commit();
+    res.json({ message: 'Venta eliminada y stock restaurado exitosamente' });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ message: 'Error al eliminar venta' });
+  } finally {
+    conn.release();
+  }
+};

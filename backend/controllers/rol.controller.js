@@ -124,3 +124,20 @@ export const eliminarRol = async (req, res) => {
     res.status(500).json({ message: 'Error al eliminar rol' });
   }
 };
+
+/**
+ * Listar todos los permisos disponibles
+ */
+export const listarPermisos = async (req, res) => {
+  try {
+    if (!req.ability.can('manage', 'Rol')) {
+      return res.status(403).json({ message: 'Acceso denegado' });
+    }
+
+    const [permisos] = await db.query(`SELECT * FROM permisos ORDER BY nombre ASC`);
+    res.json(permisos);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error al listar permisos' });
+  }
+};

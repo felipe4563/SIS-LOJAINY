@@ -1,5 +1,5 @@
 import express from "express";
-import { crearVenta, listarVentas, obtenerVenta } from "../controllers/venta.controller.js";
+import { crearVenta, listarVentas, obtenerVenta, eliminarVenta } from "../controllers/venta.controller.js";
 
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { initAbility } from "../middlewares/initAbility.js";
@@ -36,6 +36,15 @@ router.post(
   initAbility,
   checkAbility("create", "Venta"),
   crearVenta
+);
+
+// Eliminar venta
+router.delete(
+  "/:id",
+  authMiddleware,
+  initAbility,
+  checkAbility("delete", "Venta"),
+  eliminarVenta
 );
 
 export default router;

@@ -26,7 +26,7 @@ function singularize(text) {
     categorias: "Categoria",
     tallas: "Talla",
     productos: "Producto",
-    roles: "Role",
+    roles: "Rol",
     usuarios: "Usuario",
     ventas: "Venta",
     reportes: "Reporte",

@@ -11,6 +11,7 @@ import Productos from "./pages/Productos";
 import Usuarios from "./pages/Usuarios";
 import Roles from "./pages/Roles";
 import Ventas from "./pages/Ventas";
+import VentasLista from "./pages/VentasLista";
 import Reportes from "./pages/Reportes";
 import Atributos from "./pages/Atributos";
 
@@ -50,8 +51,18 @@ function App() {
         <Route
           path="ventas"
           element={
-            <ProtectedRoute action="read" subject="Venta">
+            <ProtectedRoute action="create" subject="Venta">
               <Ventas />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Historial Ventas */}
+        <Route
+          path="historial-ventas"
+          element={
+            <ProtectedRoute action="read" subject="Venta">
+              <VentasLista />
             </ProtectedRoute>
           }
         />
@@ -76,11 +87,10 @@ function App() {
           }
         />
 
-        {/* Roles */}
         <Route
           path="roles"
           element={
-            <ProtectedRoute action="manage" subject="Role">
+            <ProtectedRoute action="manage" subject="Rol">
               <Roles />
             </ProtectedRoute>
           }

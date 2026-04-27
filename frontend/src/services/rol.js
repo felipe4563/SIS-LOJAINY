@@ -44,3 +44,11 @@ export const eliminarRol = async (id) => {
   const { data } = await api.delete(`/roles/${id}`);
   return data;
 };
+
+/**
+ * Listar todos los permisos
+ */
+export const listarPermisos = async () => {
+  const { data } = await api.get('/roles/permisos');
+  return data;
+};

@@ -1,4 +1,5 @@
 import { useEffect, useState, useId } from "react";
+import Select from "react-select";
 import {
   listarCategorias,
   listarColores,
@@ -164,6 +165,13 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
     });
   };
 
+  const handleSelectChange = (selectedOption, { name }) => {
+    setForm({
+      ...form,
+      [name]: selectedOption ? selectedOption.value : ""
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -304,20 +312,17 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700">
                   Categoría *
                 </label>
-                <select
+                <Select
                   name="id_categoria"
-                  onChange={handleChange}
-                  value={form.id_categoria}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800"
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {categorias.map(c => (
-                    <option key={`categoria-${c.id_categoria}`} value={c.id_categoria}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Buscar categoría..."
+                  isClearable
+                  isSearchable
+                  value={categorias.map(c => ({ value: c.id_categoria, label: c.nombre })).find(op => op.value === form.id_categoria) || null}
+                  onChange={handleSelectChange}
+                  options={categorias.map(c => ({ value: c.id_categoria, label: c.nombre }))}
+                  className="react-select-container text-gray-800"
+                  classNamePrefix="react-select"
+                />
               </div>
 
               {/* Color */}
@@ -325,20 +330,17 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700">
                   Color *
                 </label>
-                <select
+                <Select
                   name="id_color"
-                  onChange={handleChange}
-                  value={form.id_color}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800"
-                >
-                  <option value="">Seleccionar color</option>
-                  {colores.map(c => (
-                    <option key={`color-${c.id_color}`} value={c.id_color}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Buscar color..."
+                  isClearable
+                  isSearchable
+                  value={colores.map(c => ({ value: c.id_color, label: c.nombre })).find(op => op.value === form.id_color) || null}
+                  onChange={handleSelectChange}
+                  options={colores.map(c => ({ value: c.id_color, label: c.nombre }))}
+                  className="react-select-container text-gray-800"
+                  classNamePrefix="react-select"
+                />
               </div>
 
               {/* Talla */}
@@ -346,20 +348,17 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700">
                   Talla *
                 </label>
-                <select
+                <Select
                   name="id_talla"
-                  onChange={handleChange}
-                  value={form.id_talla}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800"
-                >
-                  <option value="">Seleccionar talla</option>
-                  {tallas.map(t => (
-                    <option key={`talla-${t.id_talla}`} value={t.id_talla}>
-                      {t.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Buscar talla..."
+                  isClearable
+                  isSearchable
+                  value={tallas.map(t => ({ value: t.id_talla, label: t.nombre })).find(op => op.value === form.id_talla) || null}
+                  onChange={handleSelectChange}
+                  options={tallas.map(t => ({ value: t.id_talla, label: t.nombre }))}
+                  className="react-select-container text-gray-800"
+                  classNamePrefix="react-select"
+                />
               </div>
 
               {/* Marca */}
@@ -367,20 +366,17 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700">
                   Marca *
                 </label>
-                <select
+                <Select
                   name="id_marca"
-                  onChange={handleChange}
-                  value={form.id_marca}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-800"
-                >
-                  <option value="">Seleccionar marca</option>
-                  {marcas.map(m => (
-                    <option key={`marca-${m.id_marca}`} value={m.id_marca}>
-                      {m.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Buscar marca..."
+                  isClearable
+                  isSearchable
+                  value={marcas.map(m => ({ value: m.id_marca, label: m.nombre })).find(op => op.value === form.id_marca) || null}
+                  onChange={handleSelectChange}
+                  options={marcas.map(m => ({ value: m.id_marca, label: m.nombre }))}
+                  className="react-select-container text-gray-800"
+                  classNamePrefix="react-select"
+                />
               </div>
             </div>
 
