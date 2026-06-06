@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 26-04-2026 a las 22:29:20
+-- Tiempo de generación: 27-04-2026 a las 13:25:04
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -114,6 +114,7 @@ INSERT INTO `permisos` (`id_permiso`, `nombre`) VALUES
 (2, 'tallas.manage'),
 (12, 'usuarios.manage'),
 (8, 'ventas.create'),
+(17, 'ventas.delete'),
 (9, 'ventas.read');
 
 -- --------------------------------------------------------
@@ -400,7 +401,7 @@ ALTER TABLE `marcas`
 -- AUTO_INCREMENT de la tabla `permisos`
 --
 ALTER TABLE `permisos`
-  MODIFY `id_permiso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `id_permiso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT de la tabla `productos`

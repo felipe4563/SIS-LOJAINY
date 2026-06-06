@@ -1,5 +1,5 @@
 import express from "express";
-import { crearVenta, listarVentas, obtenerVenta, eliminarVenta } from "../controllers/venta.controller.js";
+import { crearVenta, listarVentas, obtenerVenta, eliminarVenta, buscarClientePorCI } from "../controllers/venta.controller.js";
 
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { initAbility } from "../middlewares/initAbility.js";
@@ -10,6 +10,14 @@ const router = express.Router();
 // ==========================
 // VENTAS
 // ==========================
+
+// Buscar cliente por CI (autocompletar)
+router.get(
+  "/cliente/:ci",
+  authMiddleware,
+  initAbility,
+  buscarClientePorCI
+);
 
 // Listar ventas (según rol)
 router.get(

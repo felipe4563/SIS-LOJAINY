@@ -4,215 +4,172 @@ import {
   listarCategorias,
   listarColores,
   listarTallas,
-  listarMarcas
+  listarMarcas,
 } from "../../services/atributos";
 import { crearProducto, actualizarProducto } from "../../services/producto";
+import { Upload, Check, X, AlertCircle } from "lucide-react";
 
 const FormularioProducto = ({ producto, onClose, onSuccess }) => {
   const [categorias, setCategorias] = useState([]);
-  const [colores, setColores] = useState([]);
-  const [tallas, setTallas] = useState([]);
-  const [marcas, setMarcas] = useState([]);
+  const [colores,    setColores]    = useState([]);
+  const [tallas,     setTallas]     = useState([]);
+  const [marcas,     setMarcas]     = useState([]);
 
   const [form, setForm] = useState({
     id_categoria: "",
-    id_color: "",
-    id_talla: "",
-    id_marca: "",
-    precio: "",
-    descripcion: "",
-    stock: 1
+    id_color:     "",
+    id_talla:     "",
+    id_marca:     "",
+    precio:       "",
+    descripcion:  "",
+    stock:        1,
   });
 
-  const [imagenes, setImagenes] = useState([]); // Nuevas imágenes (File objects)
-  const [imagenesExistentes, setImagenesExistentes] = useState([]); // URLs de imágenes existentes
-  const [imagenesAEliminar, setImagenesAEliminar] = useState([]); // IDs o nombres de imágenes a eliminar
-  const [cargando, setCargando] = useState(false);
-  const [previewImagenes, setPreviewImagenes] = useState([]); // Todas las imágenes para preview
-  
-  // ID único para el input file
+  const [imagenes,          setImagenes]          = useState([]);
+  const [imagenesExistentes,setImagenesExistentes]= useState([]);
+  const [imagenesAEliminar, setImagenesAEliminar] = useState([]);
+  const [cargando,          setCargando]          = useState(false);
+  const [previewImagenes,   setPreviewImagenes]   = useState([]);
+  const [errorForm,         setErrorForm]         = useState("");
+
   const fileInputId = useId();
 
   useEffect(() => {
     const cargarDatos = async () => {
       try {
         const [cat, col, tal, mar] = await Promise.all([
-          listarCategorias(),
-          listarColores(),
-          listarTallas(),
-          listarMarcas()
+          listarCategorias(), listarColores(), listarTallas(), listarMarcas(),
         ]);
-        
-        setCategorias(cat);
-        setColores(col);
-        setTallas(tal);
-        setMarcas(mar);
+        setCategorias(cat); setColores(col); setTallas(tal); setMarcas(mar);
 
         if (producto) {
           setForm({
             id_categoria: producto.id_categoria || "",
-            id_color: producto.id_color || "",
-            id_talla: producto.id_talla || "",
-            id_marca: producto.id_marca || "",
-            precio: producto.precio || "",
-            descripcion: producto.descripcion || "",
-            stock: producto.stock || 1
+            id_color:     producto.id_color     || "",
+            id_talla:     producto.id_talla     || "",
+            id_marca:     producto.id_marca     || "",
+            precio:       producto.precio       || "",
+            descripcion:  producto.descripcion  || "",
+            stock:        producto.stock        || 1,
           });
-          
-          // Cargar imágenes existentes del producto
-          if (producto.imagenes && producto.imagenes.length > 0) {
-            // Si producto.imagenes es un array de nombres de archivo
-            const urlsExistentes = producto.imagenes.map(img => {
-              // Verificar si ya es una URL completa
-              if (typeof img === 'string' && (img.startsWith('http') || img.startsWith('blob:'))) {
-                return img;
-              }
-              // Si es solo el nombre del archivo, construir la URL
-              return `${import.meta.env.VITE_APP_DOMAIN || 'http://localhost:5000'}/uploads/productos/${img}`;
-            });
-            
-            // Solo guardar nombres de archivo, no URLs completas
-            const nombresImagenes = producto.imagenes.map(img => {
-              if (typeof img === 'string' && img.includes('/')) {
-                // Extraer solo el nombre del archivo de la URL
-                return img.split('/').pop();
-              }
-              return img;
-            });
-            
-            setImagenesExistentes(nombresImagenes); // Guardar solo los nombres
-            setPreviewImagenes(urlsExistentes.map((url, index) => ({
-              url,
-              type: 'existing',
-              nombre: nombresImagenes[index],
-              id: `existing-${index}-${Date.now()}`
+
+          if (producto.imagenes?.length > 0) {
+            const urlsExistentes = producto.imagenes.map(img =>
+              typeof img === "string" && (img.startsWith("http") || img.startsWith("blob:"))
+                ? img
+                : `${import.meta.env.VITE_APP_DOMAIN || "http://localhost:5000"}/uploads/productos/${img}`
+            );
+            const nombres = producto.imagenes.map(img =>
+              typeof img === "string" && img.includes("/") ? img.split("/").pop() : img
+            );
+            setImagenesExistentes(nombres);
+            setPreviewImagenes(urlsExistentes.map((url, i) => ({
+              url, type: "existing", nombre: nombres[i], id: `existing-${i}-${Date.now()}`,
             })));
           }
         }
-      } catch (error) {
-        console.error("Error al cargar datos:", error);
+      } catch (err) {
+        console.error(err);
       }
     };
-
     cargarDatos();
   }, [producto]);
 
-  // Manejar preview de nuevas imágenes
   useEffect(() => {
     if (imagenes.length > 0) {
       const newPreviews = [];
-      const promises = [];
-      
-      Array.from(imagenes).forEach((img, imgIndex) => {
-        if (img instanceof File) {
-          const promise = new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              newPreviews.push({
-                url: reader.result,
-                type: 'new',
-                file: img,
-                nombre: img.name,
-                id: `new-${Date.now()}-${imgIndex}-${Math.random()}`
-              });
-              resolve();
-            };
-            reader.readAsDataURL(img);
-          });
-          promises.push(promise);
-        }
-      });
-      
+      const promises = Array.from(imagenes).map((img, idx) =>
+        img instanceof File
+          ? new Promise(resolve => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                newPreviews.push({ url: reader.result, type: "new", file: img, nombre: img.name, id: `new-${Date.now()}-${idx}` });
+                resolve();
+              };
+              reader.readAsDataURL(img);
+            })
+          : Promise.resolve()
+      );
       Promise.all(promises).then(() => {
-        // Combinar imágenes existentes con nuevas
-        const previewsExistentes = imagenesExistentes.map((img, index) => ({
-          url: `${import.meta.env.VITE_APP_DOMAIN || 'http://localhost:5000'}/uploads/productos/${img}`,
-          type: 'existing',
-          nombre: img,
-          id: `existing-${index}-${img}`
+        const existentes = imagenesExistentes.map((img, i) => ({
+          url:    `${import.meta.env.VITE_APP_DOMAIN || "http://localhost:5000"}/uploads/productos/${img}`,
+          type:   "existing", nombre: img, id: `existing-${i}-${img}`,
         }));
-        
-        setPreviewImagenes([...previewsExistentes, ...newPreviews]);
+        setPreviewImagenes([...existentes, ...newPreviews]);
       });
     } else {
-      // Solo mostrar imágenes existentes si no hay nuevas
-      const previewsExistentes = imagenesExistentes.map((img, index) => ({
-        url: `${import.meta.env.VITE_APP_DOMAIN || 'http://localhost:5000'}/uploads/productos/${img}`,
-        type: 'existing',
-        nombre: img,
-        id: `existing-${index}-${img}`
-      }));
-      setPreviewImagenes(previewsExistentes);
+      setPreviewImagenes(imagenesExistentes.map((img, i) => ({
+        url:    `${import.meta.env.VITE_APP_DOMAIN || "http://localhost:5000"}/uploads/productos/${img}`,
+        type:   "existing", nombre: img, id: `existing-${i}-${img}`,
+      })));
     }
   }, [imagenes, imagenesExistentes]);
 
-  // Limpiar URLs de blob cuando el componente se desmonte
   useEffect(() => {
     return () => {
-      previewImagenes.forEach(preview => {
-        if (preview && preview.url && preview.url.startsWith('blob:')) {
-          URL.revokeObjectURL(preview.url);
-        }
-      });
+      previewImagenes.forEach(p => { if (p?.url?.startsWith("blob:")) URL.revokeObjectURL(p.url); });
     };
   }, [previewImagenes]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm({ 
-      ...form, 
-      [name]: name === 'stock' || name === 'precio' ? (value === '' ? '' : Number(value)) : value 
-    });
+    setForm({ ...form, [name]: name === "stock" || name === "precio" ? (value === "" ? "" : Number(value)) : value });
   };
 
-  const handleSelectChange = (selectedOption, { name }) => {
-    setForm({
-      ...form,
-      [name]: selectedOption ? selectedOption.value : ""
-    });
+  const handleSelectChange = (selected, { name }) => {
+    setForm({ ...form, [name]: selected ? selected.value : "" });
+  };
+
+  const handleFileChange = (e) => {
+    if (!e.target.files) return;
+    const nuevas = Array.from(e.target.files);
+    const total  = (imagenesExistentes.length - imagenesAEliminar.length) + imagenes.length + nuevas.length;
+    if (total > 10) {
+      setErrorForm(`Máximo 10 imágenes permitidas. Actualmente tienes ${total - nuevas.length}.`);
+      setTimeout(() => setErrorForm(""), 4000);
+      return;
+    }
+    setImagenes(prev => [...prev, ...nuevas]);
+    e.target.value = "";
+  };
+
+  const handleEliminarImagen = (index) => {
+    const img = previewImagenes[index];
+    if (!img) return;
+    if (img.type === "existing") {
+      setImagenesAEliminar(prev => [...prev, img.nombre]);
+      setImagenesExistentes(prev => prev.filter(n => n !== img.nombre));
+    } else if (img.type === "new") {
+      if (img.url?.startsWith("blob:")) URL.revokeObjectURL(img.url);
+      const fi = imagenes.findIndex(f => f.name === img.file?.name && f.size === img.file?.size);
+      if (fi !== -1) setImagenes(prev => prev.filter((_, i) => i !== fi));
+    }
+    setPreviewImagenes(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEliminarTodas = () => {
+    previewImagenes.forEach(p => { if (p?.url?.startsWith("blob:")) URL.revokeObjectURL(p.url); });
+    setImagenes([]); setImagenesExistentes([]); setImagenesAEliminar([]); setPreviewImagenes([]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validación básica
+
     if (!form.id_categoria || !form.id_color || !form.id_talla || !form.id_marca) {
-      alert("Por favor, complete todos los campos obligatorios");
+      setErrorForm("Completa todos los campos obligatorios: Categoría, Color, Talla y Marca.");
+      setTimeout(() => setErrorForm(""), 4000);
       return;
     }
-    
-    setCargando(true);
 
+    setCargando(true);
     const fd = new FormData();
-    
-    // Añadir campos del formulario
-    Object.entries(form).forEach(([key, value]) => {
-      if (value !== null && value !== undefined && value !== '') {
-        fd.append(key, value);
-      }
+    Object.entries(form).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== "") fd.append(k, v);
     });
-    
-    // Añadir nuevas imágenes
-    if (imagenes.length > 0) {
-      imagenes.forEach(img => {
-        if (img instanceof File) {
-          fd.append("imagenes", img);
-        }
-      });
-    }
-    
-    // Añadir imágenes a eliminar (solo para actualización)
+    imagenes.forEach(img => { if (img instanceof File) fd.append("imagenes", img); });
     if (producto && imagenesAEliminar.length > 0) {
       fd.append("imagenes_a_eliminar", JSON.stringify(imagenesAEliminar));
     }
-    
-    // Log para depuración
-    console.log("Enviando FormData con:", {
-      ...form,
-      imagenesNuevas: imagenes.length,
-      imagenesAEliminar,
-      imagenesExistentes: imagenesExistentes.length
-    });
 
     try {
       if (producto) {
@@ -220,383 +177,287 @@ const FormularioProducto = ({ producto, onClose, onSuccess }) => {
       } else {
         await crearProducto(fd);
       }
-
       onSuccess();
       onClose();
     } catch (err) {
-      console.error("Error al guardar producto:", err);
-      alert("Error al guardar el producto: " + (err.response?.data?.message || err.message));
+      console.error(err);
+      setErrorForm(err.response?.data?.message || "Error al guardar el producto. Intenta de nuevo.");
     } finally {
       setCargando(false);
     }
   };
 
-  const handleFileChange = (e) => {
-    if (e.target.files) {
-      const nuevasImagenes = Array.from(e.target.files);
-      
-      // Validar número máximo de imágenes
-      const totalImagenes = (imagenesExistentes.length - imagenesAEliminar.length) + 
-                           imagenes.length + nuevasImagenes.length;
-      if (totalImagenes > 10) {
-        alert(`Máximo 10 imágenes permitidas. Actualmente tienes ${totalImagenes - nuevasImagenes.length}`);
-        return;
-      }
-      
-      setImagenes(prev => [...prev, ...nuevasImagenes]);
-      
-      // Limpiar input para permitir seleccionar las mismas imágenes otra vez
-      e.target.value = '';
-    }
+  const selectStyles = {
+    control: (base, state) => ({
+      ...base,
+      borderColor: state.isFocused ? "#003087" : "#e2e8f0",
+      borderRadius: "12px",
+      boxShadow: state.isFocused ? "0 0 0 3px rgba(0,48,135,0.12)" : "none",
+      "&:hover": { borderColor: "#003087" },
+      fontSize: "14px",
+      minHeight: "42px",
+    }),
+    option: (base, state) => ({
+      ...base,
+      background: state.isSelected ? "#003087" : state.isFocused ? "#eff6ff" : "white",
+      color:      state.isSelected ? "white" : "#1e293b",
+      fontSize:   "14px",
+    }),
+    placeholder: base => ({ ...base, color: "#94a3b8", fontSize: "14px" }),
   };
 
-  const handleEliminarImagen = (index) => {
-    const imagenAEliminar = previewImagenes[index];
-    
-    if (!imagenAEliminar) return;
-    
-    if (imagenAEliminar.type === 'existing') {
-      // Si es imagen existente, agregar a la lista de eliminación
-      setImagenesAEliminar(prev => [...prev, imagenAEliminar.nombre]);
-      
-      // Remover de imágenes existentes
-      setImagenesExistentes(prev => 
-        prev.filter(img => img !== imagenAEliminar.nombre)
-      );
-    } else if (imagenAEliminar.type === 'new') {
-      // Si es imagen nueva, revocar URL y eliminar del array
-      if (imagenAEliminar.url && imagenAEliminar.url.startsWith('blob:')) {
-        URL.revokeObjectURL(imagenAEliminar.url);
-      }
-      
-      // Encontrar y eliminar el File object correspondiente
-      const fileIndex = imagenes.findIndex(img => 
-        img.name === imagenAEliminar.file?.name && 
-        img.size === imagenAEliminar.file?.size
-      );
-      
-      if (fileIndex !== -1) {
-        setImagenes(prev => prev.filter((_, i) => i !== fileIndex));
-      }
-    }
-    
-    // Remover del preview
-    setPreviewImagenes(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleEliminarTodas = () => {
-    // Revocar todas las URLs de blob
-    previewImagenes.forEach(preview => {
-      if (preview && preview.url && preview.url.startsWith('blob:')) {
-        URL.revokeObjectURL(preview.url);
-      }
-    });
-    
-    // Eliminar todas
-    setImagenes([]);
-    setImagenesExistentes([]);
-    setImagenesAEliminar([]);
-    setPreviewImagenes([]);
-  };
+  const inputCls = "w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003087]/30 focus:border-[#003087]/50 transition placeholder-slate-400";
+  const labelCls = "block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5";
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Formulario */}
-      <form onSubmit={handleSubmit} className="flex flex-col h-full">
-        <div className="p-6 flex-grow overflow-y-auto">
-          <div className="space-y-6">
-            {/* Grid responsivo para los campos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Categoría */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Categoría *
-                </label>
-                <Select
-                  name="id_categoria"
-                  placeholder="Buscar categoría..."
-                  isClearable
-                  isSearchable
-                  value={categorias.map(c => ({ value: c.id_categoria, label: c.nombre })).find(op => op.value === form.id_categoria) || null}
-                  onChange={handleSelectChange}
-                  options={categorias.map(c => ({ value: c.id_categoria, label: c.nombre }))}
-                  className="react-select-container text-gray-800"
-                  classNamePrefix="react-select"
-                />
-              </div>
+    <form onSubmit={handleSubmit} className="flex flex-col">
+      <div className="p-5 space-y-5 overflow-y-auto">
 
-              {/* Color */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Color *
-                </label>
-                <Select
-                  name="id_color"
-                  placeholder="Buscar color..."
-                  isClearable
-                  isSearchable
-                  value={colores.map(c => ({ value: c.id_color, label: c.nombre })).find(op => op.value === form.id_color) || null}
-                  onChange={handleSelectChange}
-                  options={colores.map(c => ({ value: c.id_color, label: c.nombre }))}
-                  className="react-select-container text-gray-800"
-                  classNamePrefix="react-select"
-                />
-              </div>
+        {/* Banner error */}
+        {errorForm && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-[#C8102E] text-sm font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{errorForm}</span>
+            <button type="button" onClick={() => setErrorForm("")} className="shrink-0 hover:opacity-70">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
-              {/* Talla */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Talla *
-                </label>
-                <Select
-                  name="id_talla"
-                  placeholder="Buscar talla..."
-                  isClearable
-                  isSearchable
-                  value={tallas.map(t => ({ value: t.id_talla, label: t.nombre })).find(op => op.value === form.id_talla) || null}
-                  onChange={handleSelectChange}
-                  options={tallas.map(t => ({ value: t.id_talla, label: t.nombre }))}
-                  className="react-select-container text-gray-800"
-                  classNamePrefix="react-select"
-                />
-              </div>
+        {/* Selects 2×2 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Categoría *</label>
+            <Select
+              name="id_categoria"
+              placeholder="Buscar categoría…"
+              isClearable isSearchable
+              styles={selectStyles}
+              value={categorias.map(c => ({ value: c.id_categoria, label: c.nombre })).find(o => o.value === form.id_categoria) || null}
+              onChange={handleSelectChange}
+              options={categorias.map(c => ({ value: c.id_categoria, label: c.nombre }))}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Color *</label>
+            <Select
+              name="id_color"
+              placeholder="Buscar color…"
+              isClearable isSearchable
+              styles={selectStyles}
+              value={colores.map(c => ({ value: c.id_color, label: c.nombre })).find(o => o.value === form.id_color) || null}
+              onChange={handleSelectChange}
+              options={colores.map(c => ({ value: c.id_color, label: c.nombre }))}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Talla *</label>
+            <Select
+              name="id_talla"
+              placeholder="Buscar talla…"
+              isClearable isSearchable
+              styles={selectStyles}
+              value={tallas.map(t => ({ value: t.id_talla, label: t.nombre })).find(o => o.value === form.id_talla) || null}
+              onChange={handleSelectChange}
+              options={tallas.map(t => ({ value: t.id_talla, label: t.nombre }))}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Marca *</label>
+            <Select
+              name="id_marca"
+              placeholder="Buscar marca…"
+              isClearable isSearchable
+              styles={selectStyles}
+              value={marcas.map(m => ({ value: m.id_marca, label: m.nombre })).find(o => o.value === form.id_marca) || null}
+              onChange={handleSelectChange}
+              options={marcas.map(m => ({ value: m.id_marca, label: m.nombre }))}
+            />
+          </div>
+        </div>
 
-              {/* Marca */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Marca *
-                </label>
-                <Select
-                  name="id_marca"
-                  placeholder="Buscar marca..."
-                  isClearable
-                  isSearchable
-                  value={marcas.map(m => ({ value: m.id_marca, label: m.nombre })).find(op => op.value === form.id_marca) || null}
-                  onChange={handleSelectChange}
-                  options={marcas.map(m => ({ value: m.id_marca, label: m.nombre }))}
-                  className="react-select-container text-gray-800"
-                  classNamePrefix="react-select"
-                />
-              </div>
-            </div>
+        {/* Descripción */}
+        <div>
+          <label className={labelCls}>Descripción *</label>
+          <input
+            name="descripcion"
+            placeholder="Ej. Camiseta de algodón premium"
+            value={form.descripcion}
+            onChange={handleChange}
+            required
+            className={inputCls}
+          />
+        </div>
 
-            {/* Descripción */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Descripción *
-              </label>
+        {/* Precio + Stock */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Precio (Bs) *</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold pointer-events-none">Bs</span>
               <input
-                name="descripcion"
-                placeholder="Ej. Camiseta de algodón premium"
+                name="precio"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={form.precio}
                 onChange={handleChange}
-                value={form.descripcion}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400"
                 required
+                className={`${inputCls} pl-9`}
               />
             </div>
+          </div>
+          <div>
+            <label className={labelCls}>Stock *</label>
+            <input
+              name="stock"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={form.stock}
+              onChange={handleChange}
+              required
+              className={inputCls}
+            />
+          </div>
+        </div>
 
-            {/* Grid para precio y stock */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Precio */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Precio (Bs) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
-                    Bs
-                  </span>
-                  <input
-                    name="precio"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    onChange={handleChange}
-                    value={form.precio}
-                    className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                    required
-                  />
-                </div>
-              </div>
+        {/* Imágenes */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className={labelCls}>
+              Imágenes del producto
+              <span className="text-slate-400 ml-1 normal-case font-normal">
+                ({previewImagenes.length}/10
+                {imagenesAEliminar.length > 0 && ` · ${imagenesAEliminar.length} a eliminar`})
+              </span>
+            </label>
+          </div>
 
-              {/* Stock */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Stock *
-                </label>
-                <input
-                  name="stock"
-                  type="number"
-                  min="1"
-                  placeholder="Cantidad disponible"
-                  onChange={handleChange}
-                  value={form.stock}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                  required
-                />
-              </div>
+          <input
+            type="file"
+            id={fileInputId}
+            multiple
+            accept="image/*"
+            onChange={handleFileChange}
+            disabled={cargando}
+            className="hidden"
+          />
+          <label
+            htmlFor={fileInputId}
+            className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all duration-200 text-center ${
+              cargando
+                ? "border-slate-100 bg-slate-50 cursor-not-allowed opacity-60"
+                : "border-slate-200 hover:border-[#003087]/50 hover:bg-[#003087]/5"
+            }`}
+          >
+            <Upload className={`w-8 h-8 ${cargando ? "text-slate-300" : "text-slate-400"}`} />
+            <div>
+              <span className={`text-sm font-semibold ${cargando ? "text-slate-400" : "text-[#003087]"}`}>
+                Haz clic para subir
+              </span>
+              <span className="text-sm text-slate-500"> o arrastra y suelta</span>
             </div>
+            <p className="text-xs text-slate-400">PNG, JPG, GIF · Máx. 10 imágenes</p>
+          </label>
 
-            {/* Subida de archivos */}
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Imágenes del producto 
-                <span className="text-gray-500 ml-2">
-                  ({previewImagenes.length}/10)
-                  {imagenesAEliminar.length > 0 && ` | ${imagenesAEliminar.length} marcadas para eliminar`}
-                </span>
-              </label>
-              
-              <div className="relative">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id={fileInputId}
+          {/* Previews */}
+          {previewImagenes.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                  Vista previa ({previewImagenes.length})
+                </p>
+                <button
+                  type="button"
+                  onClick={handleEliminarTodas}
                   disabled={cargando}
-                />
-                
-                <label 
-                  htmlFor={fileInputId}
-                  className={`block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-200 ${
-                    cargando 
-                      ? 'border-gray-200 bg-gray-50 cursor-not-allowed' 
-                      : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                  }`}
+                  className="text-xs text-[#C8102E] hover:opacity-70 font-semibold disabled:opacity-40 flex items-center gap-1"
                 >
-                  <div className="flex flex-col items-center">
-                    <svg className={`w-12 h-12 mb-3 ${cargando ? 'text-gray-300' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    <p className={`text-sm ${cargando ? 'text-gray-400' : 'text-gray-600'}`}>
-                      <span className={`font-medium ${cargando ? 'text-gray-400' : 'text-blue-600 hover:text-blue-500'}`}>
-                        Haz clic para subir
-                      </span>{' '}
-                      o arrastra y suelta
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      PNG, JPG, GIF • Máx. 10 imágenes
-                    </p>
-                  </div>
-                </label>
+                  <X className="w-3 h-3" /> Eliminar todas
+                </button>
               </div>
-              
-              {/* Vista previa de imágenes seleccionadas */}
-              {previewImagenes.length > 0 && (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-medium text-gray-700">
-                      Vista previa de imágenes
-                    </p>
-                    <div className="flex gap-2">
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                {previewImagenes.map((preview, index) =>
+                  preview ? (
+                    <div key={preview.id || `preview-${index}`} className="relative group">
+                      <div className={`aspect-square rounded-xl overflow-hidden border-2 transition-colors ${
+                        preview.type === "existing" ? "border-[#003087]/30" : "border-green-400/50"
+                      }`}>
+                        <img
+                          src={preview.url}
+                          alt={`Vista previa ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={e => {
+                            e.target.onerror = null;
+                            e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%23f1f5f9'/%3E%3C/svg%3E";
+                          }}
+                        />
+                        {preview.nombre && imagenesAEliminar.includes(preview.nombre) && (
+                          <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center rounded-xl">
+                            <span className="text-white text-xs font-bold">ELIMINAR</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <span className={`absolute top-1 left-1 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                        preview.type === "existing" ? "bg-[#003087]" : "bg-green-500"
+                      }`}>
+                        {preview.type === "existing" ? "Exist." : "Nueva"}
+                      </span>
+
                       <button
                         type="button"
-                        onClick={handleEliminarTodas}
-                        className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 border border-red-200 rounded"
+                        onClick={() => handleEliminarImagen(index)}
                         disabled={cargando}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#C8102E] text-white rounded-full flex items-center justify-center hover:bg-red-700 transition shadow-sm disabled:opacity-40"
+                        aria-label={`Eliminar imagen ${index + 1}`}
                       >
-                        Eliminar todas
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                    {previewImagenes.map((preview, index) => (
-                      preview ? (
-                        <div key={preview.id || `preview-${index}`} className="relative group">
-                          <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 border-2 border-gray-200">
-                            <img
-                              src={preview.url}
-                              alt={`Vista previa ${index + 1}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='14' fill='%239ca3af'%3EImagen%3C/text%3E%3C/svg%3E";
-                              }}
-                            />
-                            {preview.nombre && imagenesAEliminar.includes(preview.nombre) && (
-                              <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
-                                <span className="text-white font-bold">ELIMINAR</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="absolute top-1 left-1">
-                            {preview.type === 'existing' && (
-                              <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                                Existente
-                              </span>
-                            )}
-                            {preview.type === 'new' && (
-                              <span className="bg-green-500 text-white text-xs px-2 py-1 rounded">
-                                Nueva
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleEliminarImagen(index)}
-                            disabled={cargando}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition shadow-md"
-                            aria-label={`Eliminar imagen ${index + 1}`}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ) : null
-                    ))}
-                  </div>
-                </div>
-              )}
+                  ) : null
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
+      </div>
 
-        {/* Footer con botones */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition flex-1 font-medium"
-              disabled={cargando}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={cargando}
-              className={`px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg transition shadow-md flex items-center justify-center gap-2 flex-1 font-medium ${
-                cargando 
-                  ? 'opacity-70 cursor-not-allowed' 
-                  : 'hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
-              }`}
-            >
-              {cargando ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {producto ? 'Actualizar Producto' : 'Crear Producto'}
-                </>
-              )}
-            </button>
-          </div>
-          
-          {/* Mensaje de ayuda */}
-          <p className="text-xs text-gray-500 text-center mt-2">
-            Todos los campos marcados con * son obligatorios
-          </p>
+      {/* Footer sticky */}
+      <div className="sticky bottom-0 bg-white border-t border-slate-100 px-5 py-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={cargando}
+            className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={cargando}
+            className="flex-1 py-2.5 bg-[#003087] text-white rounded-xl text-sm font-bold hover:bg-[#003087]/90 transition-colors shadow-sm disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {cargando ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Guardando…
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                {producto ? "Actualizar Producto" : "Crear Producto"}
+              </>
+            )}
+          </button>
         </div>
-      </form>
-    </div>
+        <p className="text-xs text-slate-400 text-center mt-2">Los campos con * son obligatorios</p>
+      </div>
+    </form>
   );
 };
 

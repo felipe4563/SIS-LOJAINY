@@ -14,6 +14,7 @@ import Ventas from "./pages/Ventas";
 import VentasLista from "./pages/VentasLista";
 import Reportes from "./pages/Reportes";
 import Atributos from "./pages/Atributos";
+import Perfil from "./pages/Perfil";
 
 // 🔐 Ruta protegida con CASL
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -120,6 +121,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Mi Perfil — sin restricción de permisos, cualquier usuario autenticado */}
+        <Route path="perfil" element={<Perfil />} />
       </Route>
       {/* Fallback */}
       <Route

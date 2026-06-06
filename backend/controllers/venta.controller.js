@@ -51,13 +51,25 @@ export const crearVenta = async (req, res) => {
     for (let item of detalles) {
       const { id_producto, precio, cantidad = 1 } = item;
 
-      // Insertar detalle
+      // Verify stock before reducing (prevents negative stock)
+      const [stockRows] = await conn.query(
+        `SELECT stock FROM productos WHERE id_producto = ? FOR UPDATE`,
+        [id_producto]
+      );
+      if (!stockRows.length) {
+        await conn.rollback();
+        return res.status(404).json({ message: `Producto ${id_producto} no encontrado` });
+      }
+      if (stockRows[0].stock < cantidad) {
+        await conn.rollback();
+        return res.status(400).json({ message: `Stock insuficiente para el producto ${id_producto}` });
+      }
+
       await conn.query(
         `INSERT INTO detalle_venta (id_venta, id_producto, precio, cantidad) VALUES (?, ?, ?, ?)`,
         [id_venta, id_producto, precio, cantidad]
       );
 
-      // Actualizar stock
       await conn.query(
         `UPDATE productos SET stock = stock - ? WHERE id_producto = ?`,
         [cantidad, id_producto]
@@ -82,7 +94,7 @@ export const crearVenta = async (req, res) => {
 export const listarVentas = async (req, res) => {
   try {
     const id_usuario = req.user.id_usuario;
-    const esAdmin = req.user.rol === 'administrador';
+    const esAdmin = req.ability?.can('manage', 'Venta') ?? false;
 
     let sql = `
       SELECT 
@@ -123,7 +135,7 @@ export const listarVentas = async (req, res) => {
 export const obtenerVenta = async (req, res) => {
   const { id } = req.params;
   const id_usuario = req.user.id_usuario;
-  const esAdmin = req.user.rol === 'administrador';
+  const esAdmin = req.ability?.can('manage', 'Venta') ?? false;
 
   try {
     // Obtener venta y datos del usuario
@@ -189,6 +201,27 @@ export const obtenerVenta = async (req, res) => {
 };
 
 /**
+ * Buscar cliente por CI (para autocompletar)
+ */
+export const buscarClientePorCI = async (req, res) => {
+  const { ci } = req.params;
+  if (!ci || ci.trim().length < 2) {
+    return res.status(400).json({ message: "CI demasiado corto" });
+  }
+  try {
+    const [[cliente]] = await db.query(
+      "SELECT id_cliente, ci, nombre, apellido, celular FROM clientes WHERE ci LIKE ? LIMIT 1",
+      [`${ci.trim()}%`]
+    );
+    if (!cliente) return res.status(404).json({ message: "Cliente no encontrado" });
+    res.json(cliente);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error al buscar cliente" });
+  }
+};
+
+/**
  * Eliminar venta (y restaurar stock)
  */
 export const eliminarVenta = async (req, res) => {
@@ -198,7 +231,7 @@ export const eliminarVenta = async (req, res) => {
     await conn.beginTransaction();
 
     const id_usuario = req.user.id_usuario;
-    const esAdmin = req.user.rol === 'administrador';
+    const esAdmin = req.ability?.can('manage', 'Venta') ?? false;
 
     // 1. Verificar si la venta existe
     const [ventas] = await conn.query('SELECT id_usuario FROM ventas WHERE id_venta = ?', [id]);

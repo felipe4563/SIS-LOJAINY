@@ -3,7 +3,7 @@ import {
   obtenerVentasPorRango,
   obtenerVentasPorVendedor,
   obtenerProductosMasVendidos,
-  obtenerResumenInventario
+  obtenerResumenInventario,
 } from "../services/dashboard";
 import {
   Chart as ChartJS,
@@ -15,472 +15,452 @@ import {
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  Filler,
 } from "chart.js";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
-import { Calendar, DollarSign, Package, Users, TrendingUp, BarChart3, PieChart } from "lucide-react";
+import {
+  DollarSign,
+  Package,
+  Users,
+  TrendingUp,
+  ShoppingBag,
+  PieChart,
+  RefreshCw,
+  AlertCircle,
+} from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement
+  CategoryScale, LinearScale, BarElement, LineElement,
+  PointElement, Title, Tooltip, Legend, ArcElement, Filler
 );
 
-const Dashboard = () => {
-  const [ventasRango, setVentasRango] = useState([]);
-  const [ventasVendedor, setVentasVendedor] = useState([]);
-  const [categoriasMasVendidas, setCategoriasMasVendidas] = useState([]);
-  const [inventario, setInventario] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [filtroFecha, setFiltroFecha] = useState("mes");
-  const [error, setError] = useState(null);
+// ── Brand palette ──────────────────────────────────────────
+const C = {
+  navy:        "#003087",
+  navyMid:     "#0044BB",
+  navyLight:   "rgba(0,48,135,0.10)",
+  navySolid:   "rgba(0,48,135,0.80)",
+  yellow:      "#FFCD00",
+  yellowLight: "rgba(255,205,0,0.15)",
+  red:         "#C8102E",
+  redLight:    "rgba(200,16,46,0.12)",
+};
 
-  // Generar fechas según filtro
-  const generarFechas = (filtro) => {
-    const hoy = new Date();
-    let inicio, fin;
+const CHART_PALETTE = [
+  "rgba(0,48,135,0.80)",
+  "rgba(255,205,0,0.85)",
+  "rgba(200,16,46,0.75)",
+  "rgba(0,68,187,0.70)",
+  "rgba(230,168,0,0.80)",
+  "rgba(21,101,192,0.75)",
+  "rgba(245,127,23,0.80)",
+  "rgba(0,100,180,0.70)",
+];
 
-    switch (filtro) {
-      case "hoy":
-        inicio = fin = format(hoy, "yyyy-MM-dd");
-        break;
-      case "semana":
-        inicio = format(new Date(hoy.setDate(hoy.getDate() - hoy.getDay())), "yyyy-MM-dd");
-        fin = format(new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6)), "yyyy-MM-dd");
-        break;
-      case "mes":
-        inicio = format(new Date(hoy.getFullYear(), hoy.getMonth(), 1), "yyyy-MM-dd");
-        fin = format(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0), "yyyy-MM-dd");
-        break;
-      case "año":
-        inicio = format(new Date(hoy.getFullYear(), 0, 1), "yyyy-MM-dd");
-        fin = format(new Date(hoy.getFullYear(), 11, 31), "yyyy-MM-dd");
-        break;
-      default:
-        inicio = format(new Date(hoy.getFullYear(), hoy.getMonth(), 1), "yyyy-MM-dd");
-        fin = format(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0), "yyyy-MM-dd");
+const PERIODS = [
+  { key: "hoy",    label: "Hoy" },
+  { key: "semana", label: "Semana" },
+  { key: "mes",    label: "Mes" },
+  { key: "año",   label: "Año" },
+];
+
+// ── Helpers ────────────────────────────────────────────────
+const fmtBs = (v) =>
+  "Bs " + Number(v || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const generarFechas = (filtro) => {
+  const hoy = new Date();
+  switch (filtro) {
+    case "hoy":
+      return { inicio: format(hoy, "yyyy-MM-dd"), fin: format(hoy, "yyyy-MM-dd") };
+    case "semana": {
+      const s = new Date(hoy); s.setDate(hoy.getDate() - hoy.getDay());
+      const e = new Date(s);   e.setDate(s.getDate() + 6);
+      return { inicio: format(s, "yyyy-MM-dd"), fin: format(e, "yyyy-MM-dd") };
     }
+    case "mes":
+      return {
+        inicio: format(new Date(hoy.getFullYear(), hoy.getMonth(), 1), "yyyy-MM-dd"),
+        fin:    format(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0), "yyyy-MM-dd"),
+      };
+    case "año":
+      return {
+        inicio: format(new Date(hoy.getFullYear(), 0, 1), "yyyy-MM-dd"),
+        fin:    format(new Date(hoy.getFullYear(), 11, 31), "yyyy-MM-dd"),
+      };
+    default:
+      return { inicio: format(hoy, "yyyy-MM-dd"), fin: format(hoy, "yyyy-MM-dd") };
+  }
+};
 
-    return { inicio, fin };
-  };
+// ── Sub-components ─────────────────────────────────────────
+const StatCard = ({ label, value, Icon, accentClass, iconBg, iconColor }) => (
+  <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden`}>
+    <div className={`h-1 w-full ${accentClass}`} />
+    <div className="p-5 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest truncate">{label}</p>
+        <p className="text-2xl font-black text-slate-800 mt-2 leading-none truncate">{value}</p>
+      </div>
+      <div className={`${iconBg} p-2.5 rounded-xl shrink-0`}>
+        <Icon size={20} className={iconColor} />
+      </div>
+    </div>
+  </div>
+);
 
-  // Cargar datos
-  const cargarDatos = useCallback(async (filtro = "mes") => {
+const ChartCard = ({ title, badge, badgeClass, Icon, iconColor, children, empty, emptyText }) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-50">
+      <div className="flex items-center gap-2">
+        <div className={`p-1.5 rounded-lg ${iconColor}`}>
+          <Icon size={16} className="text-white" />
+        </div>
+        <h3 className="font-bold text-slate-700 text-sm">{title}</h3>
+      </div>
+      {badge && (
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${badgeClass}`}>
+          {badge}
+        </span>
+      )}
+    </div>
+    <div className="flex-1 p-5">
+      {empty ? (
+        <div className="h-60 flex flex-col items-center justify-center gap-2 text-slate-300">
+          <Package size={32} strokeWidth={1.5} />
+          <p className="text-sm text-slate-400">{emptyText || "Sin datos disponibles"}</p>
+        </div>
+      ) : children}
+    </div>
+  </div>
+);
+
+const commonOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.82)",
+      titleFont: { size: 12, weight: "bold" },
+      bodyFont: { size: 12 },
+      padding: 10,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      border: { display: false },
+      ticks: { font: { size: 11 }, color: "#94a3b8" },
+    },
+    y: {
+      grid: { color: "rgba(0,0,0,0.04)" },
+      border: { display: false, dash: [4, 4] },
+      ticks: {
+        font: { size: 11 },
+        color: "#94a3b8",
+        callback: (v) => "Bs " + v.toLocaleString("es-ES"),
+      },
+    },
+  },
+};
+
+// ── Main component ─────────────────────────────────────────
+const Dashboard = () => {
+  const [ventasRango, setVentasRango]           = useState([]);
+  const [ventasVendedor, setVentasVendedor]     = useState([]);
+  const [categorias, setCategorias]             = useState([]);
+  const [inventario, setInventario]             = useState(null);
+  const [loading, setLoading]                   = useState(true);
+  const [filtro, setFiltro]                     = useState("mes");
+  const [error, setError]                       = useState(null);
+
+  const cargarDatos = useCallback(async (f) => {
     setLoading(true);
     setError(null);
-    
     try {
-      const { inicio, fin } = generarFechas(filtro);
-
-      const [rango, vendedor, categorias, inv] = await Promise.all([
+      const { inicio, fin } = generarFechas(f);
+      const [rango, vendedor, cats, inv] = await Promise.all([
         obtenerVentasPorRango({ fecha_inicio: inicio, fecha_fin: fin }),
         obtenerVentasPorVendedor(),
         obtenerProductosMasVendidos(),
-        obtenerResumenInventario()
+        obtenerResumenInventario(),
       ]);
-
       setVentasRango(rango.data);
       setVentasVendedor(vendedor.data);
-      setCategoriasMasVendidas(categorias.data);
+      setCategorias(cats.data);
       setInventario(inv.data);
-    } catch (error) {
-      console.error("Error cargando datos del dashboard:", error);
+    } catch {
       setError("Error al cargar los datos. Intente nuevamente.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    cargarDatos(filtroFecha);
-  }, [cargarDatos, filtroFecha]);
+  useEffect(() => { cargarDatos(filtro); }, [cargarDatos, filtro]);
 
-  // Estilos y colores
-  const colores = {
-    primario: "rgba(59, 130, 246, 0.7)",
-    secundario: "rgba(249, 115, 22, 0.7)",
-    exito: "rgba(34, 197, 94, 0.7)",
-    peligro: "rgba(239, 68, 68, 0.7)",
-    info: "rgba(6, 182, 212, 0.7)",
-    advertencia: "rgba(245, 158, 11, 0.7)",
-    gris: "rgba(156, 163, 175, 0.7)"
+  // ── Chart data ───────────────────────────────────────────
+  const lineData = {
+    labels: ventasRango.map((v) => format(new Date(v.fecha), "dd MMM", { locale: es })),
+    datasets: [{
+      label: "Ventas (Bs)",
+      data: ventasRango.map((v) => v.total),
+      borderColor: C.navy,
+      backgroundColor: C.navyLight,
+      borderWidth: 2.5,
+      tension: 0.4,
+      fill: true,
+      pointBackgroundColor: C.navy,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    }],
   };
 
-  const coloresCategorias = Object.values(colores);
-
-  // Gráfico de ventas por rango
-  const datosVentasRango = {
-    labels: ventasRango.map(v => format(new Date(v.fecha), "dd MMM", { locale: es })),
-    datasets: [
-      {
-        label: "Total Ventas (Bs)",
-        data: ventasRango.map(v => v.total),
-        borderColor: colores.primario,
-        backgroundColor: colores.primario.replace("0.7", "0.1"),
-        tension: 0.4,
-        fill: true,
-        borderWidth: 2
-      }
-    ]
+  const barData = {
+    labels: ventasVendedor.slice(0, 8).map((v) => v.vendedor),
+    datasets: [{
+      label: "Total (Bs)",
+      data: ventasVendedor.slice(0, 8).map((v) => v.total_ventas || 0),
+      backgroundColor: CHART_PALETTE,
+      borderRadius: 6,
+      borderSkipped: false,
+    }],
   };
 
-  // Gráfico de ventas por vendedor
-  const datosVentasVendedor = {
-    labels: ventasVendedor.slice(0, 8).map(v => v.vendedor),
-    datasets: [
-      {
-        label: "Total Ventas (Bs)",
-        data: ventasVendedor.slice(0, 8).map(v => v.total_ventas || 0),
-        backgroundColor: [colores.primario, colores.secundario, colores.exito, colores.info, colores.advertencia],
-        borderRadius: 4
-      }
-    ]
+  const doughnutData = {
+    labels: categorias.slice(0, 8).map((c) => c.categoria),
+    datasets: [{
+      data: categorias.slice(0, 8).map((c) => c.total_vendido),
+      backgroundColor: CHART_PALETTE,
+      borderWidth: 2,
+      borderColor: "#fff",
+      hoverOffset: 6,
+    }],
   };
 
-  // Gráfico de categorías
-  const datosCategorias = {
-    labels: categoriasMasVendidas.slice(0, 8).map(c => c.categoria),
-    datasets: [
-      {
-        label: "Total Vendido (Bs)",
-        data: categoriasMasVendidas.slice(0, 8).map(c => c.total_vendido),
-        backgroundColor: coloresCategorias,
-        borderWidth: 1
-      }
-    ]
-  };
-
-  // Opciones para gráficos responsivos
-  const opcionesComunes = {
+  const doughnutOpts = {
     responsive: true,
     maintainAspectRatio: false,
+    cutout: "65%",
     plugins: {
       legend: {
-        position: 'top',
+        position: "bottom",
         labels: {
-          boxWidth: 12,
-          padding: 15,
-          font: {
-            size: window.innerWidth < 768 ? 10 : 12
-          }
-        }
+          boxWidth: 10,
+          padding: 12,
+          font: { size: 11 },
+          color: "#64748b",
+        },
       },
       tooltip: {
-        mode: 'index',
-        intersect: false,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: "rgba(0,0,0,0.82)",
         titleFont: { size: 12 },
         bodyFont: { size: 12 },
-        padding: 10
-      }
-    },
-    scales: {
-      x: {
-        ticks: {
-          font: {
-            size: window.innerWidth < 768 ? 10 : 11
-          }
-        }
+        padding: 10,
+        cornerRadius: 8,
       },
-      y: {
-        ticks: {
-          font: {
-            size: window.innerWidth < 768 ? 10 : 11
-          },
-          callback: function(value) {
-            return 'Bs ' + value.toLocaleString('es-ES');
-          }
-        }
-      }
-    }
+    },
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando Dashboard...</p>
-        </div>
+  // ── Loading ──────────────────────────────────────────────
+  if (loading) return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+      <div className="relative w-12 h-12">
+        <div className="absolute inset-0 rounded-full border-4 border-slate-100" />
+        <div className="absolute inset-0 rounded-full border-4 border-t-[#003087] border-r-[#FFCD00] border-b-[#C8102E] border-l-transparent animate-spin" />
       </div>
-    );
-  }
+      <p className="text-sm font-semibold text-slate-400">Cargando dashboard…</p>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      {/* Header */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">📊 Dashboard de Ventas</h1>
-            <p className="text-gray-600 mt-1">Resumen completo de ventas e inventario</p>
-          </div>
-          
-          {/* Filtros de fecha */}
-          <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm">
-            <Calendar className="w-5 h-5 text-gray-500" />
-            <select 
-              value={filtroFecha}
-              onChange={(e) => setFiltroFecha(e.target.value)}
-              className="bg-transparent border-none focus:ring-0 text-sm font-medium text-gray-700"
+    <div className="space-y-6">
+
+      {/* ── Header ─────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Dashboard</h1>
+          <p className="text-sm text-slate-400 mt-0.5">Resumen de ventas e inventario</p>
+        </div>
+
+        {/* Period tabs */}
+        <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto">
+          {PERIODS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFiltro(key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                filtro === key
+                  ? "bg-[#003087] text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
             >
-              <option value="hoy">Hoy</option>
-              <option value="semana">Esta semana</option>
-              <option value="mes">Este mes</option>
-              <option value="año">Este año</option>
-            </select>
-          </div>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* ── Error ──────────────────────────────────────── */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700">{error}</p>
-          <button 
-            onClick={() => cargarDatos(filtroFecha)}
-            className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
+        <div className="flex items-center justify-between gap-4 p-4 bg-red-50 border border-red-100 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={18} className="text-red-500 shrink-0" />
+            <p className="text-sm font-medium text-red-600">{error}</p>
+          </div>
+          <button
+            onClick={() => cargarDatos(filtro)}
+            className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors shrink-0"
           >
-            Reintentar
+            <RefreshCw size={13} /> Reintentar
           </button>
         </div>
       )}
 
-      {/* Cards de resumen */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 md:mb-8">
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Valor Inventario</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                Bs {inventario?.valor_total ? Number(inventario.valor_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-              </p>
-            </div>
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <DollarSign className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Productos</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                {inventario?.total_productos || 0}
-              </p>
-            </div>
-            <div className="p-3 bg-green-50 rounded-lg">
-              <Package className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Vendedores Activos</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                {ventasVendedor.length || 0}
-              </p>
-            </div>
-            <div className="p-3 bg-purple-50 rounded-lg">
-              <Users className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Categorías</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900 mt-2">
-                {categoriasMasVendidas.length || 0}
-              </p>
-            </div>
-            <div className="p-3 bg-orange-50 rounded-lg">
-              <PieChart className="w-6 h-6 text-orange-600" />
-            </div>
-          </div>
-        </div>
+      {/* ── Stat cards ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard
+          label="Valor Inventario"
+          value={fmtBs(inventario?.valor_total)}
+          Icon={DollarSign}
+          accentClass="bg-[#FFCD00]"
+          iconBg="bg-yellow-50"
+          iconColor="text-yellow-500"
+        />
+        <StatCard
+          label="Total Productos"
+          value={(inventario?.total_productos || 0).toLocaleString("es-ES")}
+          Icon={Package}
+          accentClass="bg-[#003087]"
+          iconBg="bg-blue-50"
+          iconColor="text-[#003087]"
+        />
+        <StatCard
+          label="Vendedores"
+          value={ventasVendedor.length}
+          Icon={Users}
+          accentClass="bg-[#C8102E]"
+          iconBg="bg-red-50"
+          iconColor="text-[#C8102E]"
+        />
+        <StatCard
+          label="Categorías"
+          value={categorias.length}
+          Icon={ShoppingBag}
+          accentClass="bg-slate-700"
+          iconBg="bg-slate-50"
+          iconColor="text-slate-500"
+        />
       </div>
 
-      {/* Gráficos principales */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Ventas por fecha */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-              <h3 className="font-semibold text-gray-900">Ventas por Fecha</h3>
-            </div>
-            <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
-              {filtroFecha.charAt(0).toUpperCase() + filtroFecha.slice(1)}
-            </span>
+      {/* ── Charts row 1 ────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard
+          title="Ventas por Fecha"
+          badge={PERIODS.find(p => p.key === filtro)?.label}
+          badgeClass="bg-blue-50 text-[#003087]"
+          Icon={TrendingUp}
+          iconColor="bg-[#003087]"
+          empty={ventasRango.length === 0}
+          emptyText="Sin ventas en este período"
+        >
+          <div className="h-64">
+            <Line data={lineData} options={commonOpts} />
           </div>
-          <div className="h-64 md:h-72">
-            {ventasRango.length > 0 ? (
-              <Line 
-                data={datosVentasRango} 
-                options={{
-                  ...opcionesComunes,
-                  plugins: {
-                    ...opcionesComunes.plugins,
-                    legend: { display: false }
-                  }
-                }}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500 text-center">No hay datos de ventas para este período</p>
-              </div>
-            )}
-          </div>
-        </div>
+        </ChartCard>
 
-        {/* Ventas por vendedor */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-purple-600" />
-              <h3 className="font-semibold text-gray-900">Top Vendedores</h3>
-            </div>
-            <span className="text-xs font-medium px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
-              Top {Math.min(ventasVendedor.length, 8)}
-            </span>
+        <ChartCard
+          title="Top Vendedores"
+          badge={`Top ${Math.min(ventasVendedor.length, 8)}`}
+          badgeClass="bg-red-50 text-[#C8102E]"
+          Icon={Users}
+          iconColor="bg-[#C8102E]"
+          empty={ventasVendedor.length === 0}
+          emptyText="Sin datos de vendedores"
+        >
+          <div className="h-64">
+            <Bar data={barData} options={commonOpts} />
           </div>
-          <div className="h-64 md:h-72">
-            {ventasVendedor.length > 0 ? (
-              <Bar 
-                data={datosVentasVendedor} 
-                options={{
-                  ...opcionesComunes,
-                  plugins: {
-                    ...opcionesComunes.plugins,
-                    legend: { display: false }
-                  },
-                  indexAxis: window.innerWidth < 768 ? 'y' : 'x'
-                }}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500 text-center">No hay datos de vendedores</p>
-              </div>
-            )}
-          </div>
-        </div>
+        </ChartCard>
       </div>
 
-      {/* Categorías y tabla */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Distribución por categoría */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <PieChart className="w-5 h-5 text-green-600" />
-              <h3 className="font-semibold text-gray-900">Distribución por Categoría</h3>
+      {/* ── Charts row 2 ────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Doughnut – 2 cols */}
+        <div className="lg:col-span-2">
+          <ChartCard
+            title="Por Categoría"
+            badge="Distribución"
+            badgeClass="bg-green-50 text-green-700"
+            Icon={PieChart}
+            iconColor="bg-green-600"
+            empty={categorias.length === 0}
+            emptyText="Sin datos"
+          >
+            <div className="h-64">
+              <Doughnut data={doughnutData} options={doughnutOpts} />
             </div>
-            <span className="text-xs font-medium px-2 py-1 bg-green-100 text-green-800 rounded-full">
-              Por valor
-            </span>
-          </div>
-          <div className="h-64 md:h-72">
-            {categoriasMasVendidas.length > 0 ? (
-              <Doughnut 
-                data={datosCategorias} 
-                options={{
-                  ...opcionesComunes,
-                  plugins: {
-                    ...opcionesComunes.plugins,
-                    legend: {
-                      position: window.innerWidth < 768 ? 'bottom' : 'right',
-                      labels: {
-                        boxWidth: 10,
-                        padding: 10
-                      }
-                    }
-                  }
-                }}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500 text-center">No hay datos de categorías</p>
-              </div>
-            )}
-          </div>
+          </ChartCard>
         </div>
 
-        {/* Tabla de categorías */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-orange-600" />
-              <h3 className="font-semibold text-gray-900">Categorías Más Vendidas</h3>
-            </div>
-            <span className="text-xs font-medium px-2 py-1 bg-orange-100 text-orange-800 rounded-full">
-              Top {categoriasMasVendidas.length}
-            </span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categoría
-                  </th>
-                  <th className="text-right py-3 px-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cantidad
-                  </th>
-                  <th className="text-right py-3 px-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {categoriasMasVendidas.slice(0, 5).map((categoria, index) => (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-2">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: coloresCategorias[index % coloresCategorias.length] }}
-                        />
-                        <span className="font-medium text-gray-900 text-sm">
-                          {categoria.categoria.length > 20 ? categoria.categoria.substring(0, 20) + '...' : categoria.categoria}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 text-right">
-                      <span className="font-medium text-gray-900">
-                        {categoria.cantidad_vendida.toLocaleString('es-ES')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2 text-right">
-                      <span className="font-bold text-blue-700">
-                        Bs {Number(categoria.total_vendido || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </td>
+        {/* Table – 3 cols */}
+        <div className="lg:col-span-3">
+          <ChartCard
+            title="Categorías Más Vendidas"
+            badge={`${categorias.length} total`}
+            badgeClass="bg-orange-50 text-orange-600"
+            Icon={ShoppingBag}
+            iconColor="bg-orange-500"
+            empty={categorias.length === 0}
+            emptyText="Sin ventas registradas"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">#</th>
+                    <th className="text-left pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Categoría</th>
+                    <th className="text-right pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Uds.</th>
+                    <th className="text-right pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {categoriasMasVendidas.length > 5 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <p className="text-sm text-gray-500 text-center">
-                Mostrando 5 de {categoriasMasVendidas.length} categorías
-              </p>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {categorias.slice(0, 6).map((cat, i) => (
+                    <tr key={i} className="group hover:bg-slate-50 transition-colors">
+                      <td className="py-3 pr-3">
+                        <span
+                          className="inline-flex w-5 h-5 rounded-md items-center justify-center text-white text-[10px] font-black"
+                          style={{ backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length].replace(/,[\d.]+\)$/, ",0.9)") }}
+                        >
+                          {i + 1}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <span className="font-semibold text-slate-700">
+                          {cat.categoria.length > 22 ? cat.categoria.slice(0, 22) + "…" : cat.categoria}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right font-medium text-slate-500">
+                        {Number(cat.cantidad_vendida).toLocaleString("es-ES")}
+                      </td>
+                      <td className="py-3 text-right font-black text-[#003087]">
+                        {fmtBs(cat.total_vendido)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {categorias.length > 6 && (
+                <p className="text-center text-xs text-slate-400 pt-4 border-t border-slate-50 mt-2">
+                  Mostrando 6 de {categorias.length} categorías
+                </p>
+              )}
             </div>
-          )}
+          </ChartCard>
         </div>
       </div>
     </div>

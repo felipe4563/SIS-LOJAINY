@@ -7,18 +7,30 @@ import bcrypt from 'bcrypt';
 export const crearUsuario = async (req, res) => {
   const { nombre, apellido, usuario, ci, correo, password, id_rol, activo = 1 } = req.body;
 
+  if (!nombre?.trim() || !usuario?.trim() || !correo?.trim() || !password || !id_rol) {
+    return res.status(400).json({ message: 'Nombre, usuario, correo, contraseña y rol son requeridos' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
-      `INSERT INTO usuarios (nombre, apellido, usuario, ci, correo, password, id_rol, activo) 
+      `INSERT INTO usuarios (nombre, apellido, usuario, ci, correo, password, id_rol, activo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nombre, apellido, usuario, ci, correo, hashedPassword, id_rol, activo]
+      [nombre.trim(), apellido?.trim() || null, usuario.trim(), ci?.trim() || null, correo.trim(), hashedPassword, id_rol, activo]
     );
 
     res.status(201).json({ message: 'Usuario creado', id_usuario: result.insertId });
   } catch (err) {
     console.error(err);
+    if (err.code === 'ER_DUP_ENTRY') {
+      if (err.sqlMessage?.includes('usuario')) return res.status(409).json({ message: 'Ese nombre de usuario ya está en uso' });
+      if (err.sqlMessage?.includes('correo'))  return res.status(409).json({ message: 'Ese correo ya está registrado' });
+      if (err.sqlMessage?.includes('ci'))      return res.status(409).json({ message: 'Esa cédula ya está registrada' });
+    }
     res.status(500).json({ message: 'Error al crear usuario' });
   }
 };
@@ -46,7 +58,11 @@ export const listarUsuarios = async (req, res) => {
 export const obtenerUsuario = async (req, res) => {
   const { id } = req.params;
   try {
-    const [rows] = await db.query(`SELECT * FROM usuarios WHERE id_usuario = ?`, [id]);
+    const [rows] = await db.query(
+      `SELECT id_usuario, nombre, apellido, usuario, ci, correo, id_rol, activo, fecha_registro
+       FROM usuarios WHERE id_usuario = ?`,
+      [id]
+    );
     if (rows.length === 0) return res.status(404).json({ message: 'Usuario no encontrado' });
     res.json(rows[0]);
   } catch (err) {

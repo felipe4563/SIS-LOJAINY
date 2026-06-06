@@ -1,49 +1,94 @@
-import React, { useEffect, useState, useRef, useContext } from "react";
+import { useEffect, useState, useRef, useContext, useCallback } from "react";
 import { AbilityContext } from "../context/AbilityContext";
 import { AuthContext } from "../context/AuthContext";
-import { listarVentas, obtenerVenta, crearVenta } from "../services/venta";
+import { listarVentas, obtenerVenta, crearVenta, buscarClientePorCI } from "../services/venta";
 import { obtenerProducto } from "../services/producto";
 import ComprobanteVenta from "../components/ComprobanteVenta";
-import { 
-  FiShoppingCart, 
-  FiUser, 
-  FiCreditCard, 
-  FiPackage, 
-  FiPrinter,
-  FiSearch,
-  FiPlus,
-  FiMinus,
-  FiCheck,
-  FiDollarSign,
-  FiList
-} from "react-icons/fi";
+import {
+  ShoppingCart, User, CreditCard, Package, Printer,
+  QrCode, Plus, Minus, CheckCircle, Banknote, ClipboardList,
+  X, AlertCircle, ShoppingBag, Trash2, UserCheck,
+} from "lucide-react";
 
+// ── Helpers ────────────────────────────────────────────────
+const fmtBs = (v) =>
+  "Bs " + Number(v || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtFecha = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
+// ── Sub-components ─────────────────────────────────────────
+const Label = ({ children, required }) => (
+  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+    {children}{required && <span className="text-[#C8102E] ml-0.5">*</span>}
+  </label>
+);
+
+const Field = ({ children }) => (
+  <div className="[&>input]:w-full [&>input]:border [&>input]:border-slate-200 [&>input]:rounded-xl [&>input]:px-3 [&>input]:py-2.5 [&>input]:text-sm [&>input]:text-slate-700 [&>input]:focus:outline-none [&>input]:focus:ring-2 [&>input]:focus:ring-[#003087]/20 [&>input]:focus:border-[#003087] [&>input]:transition-colors">
+    {children}
+  </div>
+);
+
+const MetodoBadge = ({ metodo }) => {
+  const styles = {
+    efectivo: "bg-green-50 text-green-700 border border-green-100",
+    qr: "bg-blue-50 text-[#003087] border border-blue-100",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${styles[metodo] || "bg-slate-100 text-slate-500"}`}>
+      {metodo === "efectivo" ? <Banknote size={10} /> : <QrCode size={10} />}
+      {metodo}
+    </span>
+  );
+};
+
+const StockBadge = ({ stock }) => {
+  if (stock === 0) return <span className="text-[10px] font-bold text-[#C8102E] bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">Sin stock</span>;
+  if (stock <= 3) return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">{stock} disponibles</span>;
+  return <span className="text-[10px] font-bold text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">{stock} en stock</span>;
+};
+
+// ── Main ───────────────────────────────────────────────────
 const Ventas = () => {
-  const ability = useContext(AbilityContext);
+  const ability  = useContext(AbilityContext);
   const { usuario } = useContext(AuthContext);
 
-  const [ventas, setVentas] = useState([]);
+  const [ventas, setVentas]                 = useState([]);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]               = useState(false);
+  const [procesando, setProcesando]         = useState(false);
   const [productosEnVenta, setProductosEnVenta] = useState([]);
-  const [metodoPago, setMetodoPago] = useState("efectivo");
-  const [total, setTotal] = useState(0);
-  const [cliente, setCliente] = useState({ ci: "", nombre: "", apellido: "", celular: "" });
-  const [qrInput, setQrInput] = useState("");
-  const comprobanteRef = useRef();
+  const [metodoPago, setMetodoPago]         = useState("efectivo");
+  const [total, setTotal]                   = useState(0);
+  const [cliente, setCliente]               = useState({ ci: "", nombre: "", apellido: "", celular: "" });
+  const [qrInput, setQrInput]               = useState("");
+  const [error, setError]                   = useState("");
+  const [exitoMsg, setExitoMsg]             = useState("");
+  const [clienteSugerido, setClienteSugerido] = useState(null);
+  const [buscandoCI, setBuscandoCI]         = useState(false);
+  const ciTimerRef                          = useRef(null);
+  const comprobanteRef                      = useRef();
 
   useEffect(() => {
     if (ability.can("read", "Venta")) cargarVentas();
   }, [ability]);
+
+  const mostrarError = (msg) => {
+    setError(msg);
+    setTimeout(() => setError(""), 4000);
+  };
 
   const cargarVentas = async () => {
     setLoading(true);
     try {
       const data = await listarVentas();
       setVentas(data);
-    } catch (err) {
-      console.error(err);
-      alert("Error al cargar ventas");
+    } catch {
+      mostrarError("Error al cargar el historial de ventas");
     } finally {
       setLoading(false);
     }
@@ -53,13 +98,9 @@ const Ventas = () => {
     try {
       const data = await obtenerVenta(id);
       setVentaSeleccionada(data);
-      // Scroll suave hacia la sección de detalles
-      setTimeout(() => {
-        document.getElementById("detalles-venta")?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-    } catch (err) {
-      console.error(err);
-      alert("No se pudo obtener la venta");
+      setTimeout(() => document.getElementById("panel-comprobante")?.scrollIntoView({ behavior: "smooth" }), 100);
+    } catch {
+      mostrarError("No se pudo obtener el detalle de la venta");
     }
   };
 
@@ -67,13 +108,10 @@ const Ventas = () => {
     try {
       const url = new URL(qrText);
       const partes = url.pathname.split("/").filter(Boolean);
-      
       if (partes.includes("producto")) {
-        const index = partes.indexOf("producto");
-        const id = parseInt(partes[index + 1]);
+        const id = parseInt(partes[partes.indexOf("producto") + 1]);
         return isNaN(id) ? null : id;
       }
-      
       const posibleId = parseInt(partes[0]);
       return isNaN(posibleId) ? null : posibleId;
     } catch {
@@ -83,25 +121,35 @@ const Ventas = () => {
   };
 
   const agregarProductoQR = async (textoQR) => {
-    const id_producto = extraerIdProducto(textoQR);
-    
+    if (!textoQR.trim()) return;
+    const id_producto = extraerIdProducto(textoQR.trim());
     if (!id_producto) {
-      alert("QR inválido o no contiene un ID de producto");
+      mostrarError("QR inválido: no se pudo extraer un ID de producto");
       return;
     }
-    
+
     try {
       const producto = await obtenerProducto(id_producto);
-      
+
+      // ── Validación de stock ───────────────────────────
+      if (Number(producto.stock) === 0) {
+        mostrarError(`"${producto.descripcion}" no tiene stock disponible (agotado)`);
+        setQrInput("");
+        return;
+      }
+
+      const enCarrito = productosEnVenta.find((p) => p.id_producto === id_producto);
+      if (enCarrito && enCarrito.cantidad >= Number(producto.stock)) {
+        mostrarError(`Solo hay ${producto.stock} unidades disponibles de "${producto.descripcion}"`);
+        setQrInput("");
+        return;
+      }
+
       setProductosEnVenta((prev) => {
-        const existe = prev.find((p) => p.id_producto === id_producto);
         let nuevos;
-        
-        if (existe) {
+        if (enCarrito) {
           nuevos = prev.map((p) =>
-            p.id_producto === id_producto
-              ? { ...p, cantidad: p.cantidad + 1 }
-              : p
+            p.id_producto === id_producto ? { ...p, cantidad: p.cantidad + 1 } : p
           );
         } else {
           nuevos = [
@@ -110,561 +158,547 @@ const Ventas = () => {
               id_producto: producto.id_producto,
               precio: Number(producto.precio),
               descripcion: producto.descripcion,
+              stock: Number(producto.stock),
               cantidad: 1,
             },
           ];
         }
-        
-        const sumaTotal = nuevos.reduce(
-          (sum, p) => sum + p.precio * p.cantidad,
-          0
-        );
-        
-        setTotal(sumaTotal);
+        setTotal(nuevos.reduce((s, p) => s + p.precio * p.cantidad, 0));
         return nuevos;
       });
-      
       setQrInput("");
-      
-    } catch (err) {
-      console.error(err);
-      alert("No se pudo agregar el producto");
+    } catch {
+      mostrarError("No se pudo obtener el producto. Verifique el código QR");
     }
   };
 
   const cambiarCantidad = (id_producto, nuevaCantidad) => {
     if (nuevaCantidad < 1) return;
-    
+    const prod = productosEnVenta.find((p) => p.id_producto === id_producto);
+    if (prod && nuevaCantidad > prod.stock) {
+      mostrarError(`Máximo disponible: ${prod.stock} unidades de "${prod.descripcion}"`);
+      return;
+    }
     const nuevos = productosEnVenta.map((p) =>
       p.id_producto === id_producto ? { ...p, cantidad: nuevaCantidad } : p
     );
     setProductosEnVenta(nuevos);
-    setTotal(nuevos.reduce((sum, p) => sum + p.precio * p.cantidad, 0));
+    setTotal(nuevos.reduce((s, p) => s + p.precio * p.cantidad, 0));
   };
 
   const eliminarProducto = (id_producto) => {
-    const nuevos = productosEnVenta.filter(p => p.id_producto !== id_producto);
+    const nuevos = productosEnVenta.filter((p) => p.id_producto !== id_producto);
     setProductosEnVenta(nuevos);
-    setTotal(nuevos.reduce((sum, p) => sum + p.precio * p.cantidad, 0));
+    setTotal(nuevos.reduce((s, p) => s + p.precio * p.cantidad, 0));
+  };
+
+  const handleCIChange = (valor) => {
+    setCliente({ ...cliente, ci: valor });
+    setClienteSugerido(null);
+    clearTimeout(ciTimerRef.current);
+    if (valor.trim().length < 3) { setBuscandoCI(false); return; }
+    setBuscandoCI(true);
+    ciTimerRef.current = setTimeout(async () => {
+      try {
+        const data = await buscarClientePorCI(valor.trim());
+        setClienteSugerido(data);
+      } catch {
+        setClienteSugerido(null);
+      } finally {
+        setBuscandoCI(false);
+      }
+    }, 400);
+  };
+
+  const aplicarSugerencia = () => {
+    if (!clienteSugerido) return;
+    setCliente({
+      ci: clienteSugerido.ci,
+      nombre: clienteSugerido.nombre,
+      apellido: clienteSugerido.apellido,
+      celular: clienteSugerido.celular || "",
+    });
+    setClienteSugerido(null);
   };
 
   const confirmarVenta = async () => {
     if (!ability.can("create", "Venta")) {
-      alert("No tienes permisos para crear ventas");
+      mostrarError("No tienes permisos para crear ventas");
       return;
     }
-
     if (productosEnVenta.length === 0) {
-      alert("Debe agregar al menos un producto a la venta");
+      mostrarError("Agrega al menos un producto a la venta");
       return;
     }
-
     if (!cliente.ci || !cliente.nombre || !cliente.apellido) {
-      alert("Complete los datos obligatorios del cliente (CI, Nombre y Apellido)");
+      mostrarError("Completa los datos obligatorios del cliente: CI, Nombre y Apellido");
       return;
     }
 
-    const datos = {
-      metodo_pago: metodoPago,
-      total,
-      detalles: productosEnVenta,
-      cliente
-    };
-
+    setProcesando(true);
     try {
-      const res = await crearVenta(datos);
-      alert(`Venta creada exitosamente! ID: ${res.id_venta}`);
+      const res = await crearVenta({ metodo_pago: metodoPago, total, detalles: productosEnVenta, cliente });
+      setExitoMsg(`Venta #${res.id_venta} registrada exitosamente`);
+      setTimeout(() => setExitoMsg(""), 5000);
       await verVenta(res.id_venta);
-
-      // Limpiar formulario
       setProductosEnVenta([]);
       setMetodoPago("efectivo");
       setTotal(0);
       setCliente({ ci: "", nombre: "", apellido: "", celular: "" });
       setQrInput("");
       cargarVentas();
-    } catch (err) {
-      console.error(err);
-      alert("Error al crear la venta");
+    } catch {
+      mostrarError("Error al registrar la venta. Intenta de nuevo");
+    } finally {
+      setProcesando(false);
     }
   };
 
   const imprimirComprobante = () => {
     if (!ventaSeleccionada) return;
-
-    const contenido = comprobanteRef.current.innerHTML;
     const ventana = window.open("", "_blank");
-
-    ventana.document.write(`
-      <html>
-        <head>
-          <title>Comprobante de Venta #${ventaSeleccionada.id_venta}</title>
-          <meta charset="utf-8" />
-          <style>
-            @media print {
-              body { margin: 0; padding: 20px; }
-            }
-          </style>
-        </head>
-        <body>
-          ${contenido}
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => window.close(), 500);
-            }
-          </script>
-        </body>
-      </html>
-    `);
-
+    ventana.document.write(`<html><head><title>Comprobante #${ventaSeleccionada.id_venta}</title><meta charset="utf-8"/><style>@media print{body{margin:0;padding:20px}}</style></head><body>${comprobanteRef.current.innerHTML}<script>window.onload=function(){window.print();setTimeout(()=>window.close(),500)}<\/script></body></html>`);
     ventana.document.close();
   };
 
-  // Formatear fecha
-  const formatFecha = (fechaStr) => {
-    if (!fechaStr) return "";
-    const fecha = new Date(fechaStr);
-    return fecha.toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const totalItems = productosEnVenta.reduce((s, p) => s + p.cantidad, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
-        {/* HEADER */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
-                <FiShoppingCart className="text-white text-2xl" />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-                  Gestión de Ventas
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Sistema integrado de ventas y facturación
-                </p>
-              </div>
-            </div>
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Usuario activo</p>
-              <p className="font-semibold text-gray-800">{usuario?.nombre || "Administrador"}</p>
-            </div>
-          </div>
+    <div className="space-y-5">
+
+      {/* ── Header ─────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Nueva Venta</h1>
+          <p className="text-sm text-slate-400 mt-0.5">Escanea los productos y registra la venta</p>
         </div>
+        <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500">
+          <User size={14} />
+          <span>{usuario?.nombre || "Vendedor"}</span>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-          {/* PANEL IZQUIERDO: NUEVA VENTA */}
-          {ability.can("create", "Venta") && (
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <FiPlus className="text-white" />
-                  Nueva Venta
-                </h2>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                {/* SCANNER QR */}
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-gray-700">
-                    <FiSearch className="inline mr-2" />
-                    Escanear código QR
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={qrInput}
-                      onChange={(e) => setQrInput(e.target.value)}
-                      placeholder="Pega el código QR o escribe el ID del producto"
-                      className="flex-1 border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          agregarProductoQR(qrInput);
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={() => agregarProductoQR(qrInput)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-5 rounded-lg font-medium transition-colors"
-                    >
-                      Agregar
-                    </button>
+      {/* ── Error / Éxito banner ───────────────────────── */}
+      {error && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-100 text-[#C8102E] px-4 py-3 rounded-xl text-sm font-medium">
+          <AlertCircle size={16} className="shrink-0" />
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-auto shrink-0 hover:opacity-70">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {exitoMsg && (
+        <div className="flex items-center gap-3 bg-green-50 border border-green-100 text-green-700 px-4 py-3 rounded-xl text-sm font-medium">
+          <CheckCircle size={16} className="shrink-0" />
+          <span>{exitoMsg}</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
+
+        {/* ── Panel izquierdo: formulario venta ──────── */}
+        {ability.can("create", "Venta") && (
+          <div className="xl:col-span-3 space-y-4">
+
+            {/* Scanner QR */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-[#003087]" />
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-[#003087]">
+                    <QrCode size={14} className="text-white" />
                   </div>
+                  <h2 className="font-bold text-slate-700 text-sm">Escanear Producto</h2>
                 </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={qrInput}
+                    onChange={(e) => setQrInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && agregarProductoQR(qrInput)}
+                    placeholder="Pega el código QR o escribe el ID del producto…"
+                    className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#003087]/20 focus:border-[#003087] transition-colors"
+                  />
+                  <button
+                    onClick={() => agregarProductoQR(qrInput)}
+                    className="bg-[#003087] hover:bg-[#002266] text-white px-5 rounded-xl font-bold text-sm transition-colors shrink-0"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            </div>
 
-                {/* DATOS DEL CLIENTE */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <FiUser className="text-blue-500" />
-                    Datos del Cliente
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        CI *
-                      </label>
-                      <input
-                        type="text"
-                        value={cliente.ci}
-                        onChange={(e) => setCliente({ ...cliente, ci: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="1234567"
-                      />
+            {/* Datos del cliente */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-[#FFCD00]" />
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-[#FFCD00]">
+                    <User size={14} className="text-[#003087]" />
+                  </div>
+                  <h2 className="font-bold text-slate-700 text-sm">Datos del Cliente</h2>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* CI con autocompletado */}
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label required>CI</Label>
+                    <div className="relative">
+                      <Field>
+                        <input
+                          type="text"
+                          value={cliente.ci}
+                          onChange={(e) => handleCIChange(e.target.value)}
+                          placeholder="1234567"
+                          autoComplete="off"
+                        />
+                      </Field>
+                      {/* Spinner búsqueda */}
+                      {buscandoCI && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-[#003087] animate-spin" />
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Celular
-                      </label>
+                    {/* Card de sugerencia */}
+                    {clienteSugerido && (
+                      <button
+                        type="button"
+                        onClick={aplicarSugerencia}
+                        className="mt-1.5 w-full flex items-center gap-2.5 bg-[#003087] hover:bg-[#002266] text-white rounded-xl px-3 py-2.5 transition-colors text-left group"
+                      >
+                        <div className="bg-[#FFCD00] p-1.5 rounded-lg shrink-0">
+                          <UserCheck size={13} className="text-[#003087]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold text-white/60 uppercase tracking-wide">Cliente encontrado</p>
+                          <p className="text-sm font-black truncate">
+                            {clienteSugerido.nombre} {clienteSugerido.apellido}
+                          </p>
+                          {clienteSugerido.celular && (
+                            <p className="text-[10px] text-white/50">{clienteSugerido.celular}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-[#FFCD00] shrink-0 group-hover:underline">
+                          Autocompletar →
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label>Celular</Label>
+                    <Field>
                       <input
                         type="text"
                         value={cliente.celular}
                         onChange={(e) => setCliente({ ...cliente, celular: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="70012345"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nombre *
-                      </label>
+                    </Field>
+                  </div>
+                  <div>
+                    <Label required>Nombre</Label>
+                    <Field>
                       <input
                         type="text"
                         value={cliente.nombre}
                         onChange={(e) => setCliente({ ...cliente, nombre: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Juan"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Apellido *
-                      </label>
+                    </Field>
+                  </div>
+                  <div>
+                    <Label required>Apellido</Label>
+                    <Field>
                       <input
                         type="text"
                         value={cliente.apellido}
                         onChange={(e) => setCliente({ ...cliente, apellido: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Pérez"
                       />
-                    </div>
+                    </Field>
                   </div>
-                </div>
-
-                {/* MÉTODO DE PAGO */}
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <FiCreditCard className="text-green-500" />
-                    Método de Pago
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setMetodoPago("efectivo")}
-                      className={`p-4 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${
-                        metodoPago === "efectivo"
-                          ? "border-green-500 bg-green-50 text-green-700"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <FiDollarSign />
-                      Efectivo
-                    </button>
-                    <button
-                      onClick={() => setMetodoPago("qr")}
-                      className={`p-4 rounded-lg border-2 transition-all flex items-center justify-center gap-2 ${
-                        metodoPago === "qr"
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <FiCreditCard />
-                      Pago QR
-                    </button>
-                  </div>
-                </div>
-
-                {/* PRODUCTOS EN VENTA */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <FiPackage className="text-purple-500" />
-                    Productos ({productosEnVenta.length})
-                  </h3>
-                  <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y">
-                    {productosEnVenta.length === 0 ? (
-                      <div className="p-8 text-center text-gray-500">
-                        <FiPackage className="text-3xl mx-auto mb-2 opacity-50" />
-                        <p>No hay productos agregados</p>
-                        <p className="text-sm mt-1">Escanea un código QR para agregar productos</p>
-                      </div>
-                    ) : (
-                      productosEnVenta.map((p) => (
-                        <div key={p.id_producto} className="p-4 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-800">{p.descripcion}</h4>
-                              <p className="text-sm text-gray-600 mt-1">
-                                Bs {Number(p.precio).toFixed(2)} c/u
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3 ml-4">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => cambiarCantidad(p.id_producto, p.cantidad - 1)}
-                                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
-                                >
-                                  <FiMinus className="text-gray-600" />
-                                </button>
-                                <span className="w-12 text-center font-medium">
-                                  {p.cantidad}
-                                </span>
-                                <button
-                                  onClick={() => cambiarCantidad(p.id_producto, p.cantidad + 1)}
-                                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center"
-                                >
-                                  <FiPlus className="text-gray-600" />
-                                </button>
-                              </div>
-                              <div className="text-right min-w-[100px]">
-                                <p className="font-bold text-gray-800">
-                                  Bs {(p.precio * p.cantidad).toFixed(2)}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => eliminarProducto(p.id_producto)}
-                                className="text-red-500 hover:text-red-700 ml-2"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* TOTAL Y BOTÓN DE CONFIRMACIÓN */}
-                <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-medium text-gray-700">Total:</span>
-                    <span className="text-3xl font-bold text-blue-600">
-                      Bs {Number(total).toFixed(2)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={confirmarVenta}
-                    disabled={productosEnVenta.length === 0 || loading}
-                    className={`w-full py-4 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                      productosEnVenta.length === 0 || loading
-                        ? "bg-gray-300 cursor-not-allowed"
-                        : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl"
-                    }`}
-                  >
-                    <FiCheck className="text-xl" />
-                    {loading ? "Procesando..." : "Confirmar Venta"}
-                  </button>
-                  <p className="text-xs text-gray-500 text-center mt-3">
-                    * Campos obligatorios: CI, Nombre y Apellido
-                  </p>
                 </div>
               </div>
             </div>
-          )}
 
-          {/* PANEL DERECHO: HISTORIAL Y DETALLES */}
-          <div className="space-y-6 md:space-y-8">
-            {/* HISTORIAL DE VENTAS */}
-            {ability.can("read", "Venta") && (
-              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <FiList className="text-white" />
-                    Historial de Ventas
-                  </h2>
+            {/* Método de pago */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-slate-200" />
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-slate-100">
+                    <CreditCard size={14} className="text-slate-600" />
+                  </div>
+                  <h2 className="font-bold text-slate-700 text-sm">Método de Pago</h2>
                 </div>
-                
-                <div className="p-6">
-                  {loading ? (
-                    <div className="text-center py-12">
-                      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                      <p className="mt-4 text-gray-600">Cargando ventas...</p>
-                    </div>
-                  ) : ventas.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <FiShoppingCart className="text-4xl mx-auto mb-3 opacity-50" />
-                      <p>No hay ventas registradas</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                      {ventas.map((v) => (
-                        <div
-                          key={v.id_venta}
-                          className={`border rounded-xl p-4 hover:shadow-md transition-shadow ${
-                            ventaSeleccionada?.id_venta === v.id_venta
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-gray-200"
-                          }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-gray-800">
-                                  Venta #{v.id_venta}
-                                </span>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  v.metodo_pago === "efectivo"
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-blue-100 text-blue-800"
-                                }`}>
-                                  {v.metodo_pago}
-                                </span>
-                              </div>
-                              <div className="text-sm text-gray-600 space-y-1">
-                                <p className="flex items-center gap-1">
-                                  <FiUser className="text-gray-400" />
-                                  {v.nombre_usuario}
-                                </p>
-                                <p>{formatFecha(v.fecha)}</p>
-                              </div>
-                            </div>
-                            <div className="flex flex-col sm:items-end gap-2">
-                              <span className="text-xl font-bold text-blue-600">
-                                Bs {Number(v.total).toFixed(2)}
-                              </span>
-                              <button
-                                onClick={() => verVenta(v.id_venta)}
-                                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg font-medium transition-all text-sm"
-                              >
-                                Ver Detalles
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setMetodoPago("efectivo")}
+                    className={`flex items-center justify-center gap-2 rounded-xl py-3 border-2 text-sm font-bold transition-all ${
+                      metodoPago === "efectivo"
+                        ? "border-green-400 bg-green-50 text-green-700"
+                        : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    }`}
+                  >
+                    <Banknote size={16} />
+                    Efectivo
+                  </button>
+                  <button
+                    onClick={() => setMetodoPago("qr")}
+                    className={`flex items-center justify-center gap-2 rounded-xl py-3 border-2 text-sm font-bold transition-all ${
+                      metodoPago === "qr"
+                        ? "border-[#003087] bg-blue-50 text-[#003087]"
+                        : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    }`}
+                  >
+                    <QrCode size={16} />
+                    Pago QR
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Productos en venta */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-[#C8102E]" />
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-[#C8102E]">
+                    <Package size={14} className="text-white" />
+                  </div>
+                  <h2 className="font-bold text-slate-700 text-sm">
+                    Productos en Venta
+                  </h2>
+                  {productosEnVenta.length > 0 && (
+                    <span className="ml-auto bg-[#003087] text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {totalItems} {totalItems === 1 ? "ítem" : "ítems"}
+                    </span>
                   )}
                 </div>
-              </div>
-            )}
 
-            {/* DETALLES DE VENTA SELECCIONADA */}
-            {ventaSeleccionada && (
-              <div id="detalles-venta" className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <FiShoppingCart className="text-white" />
-                      Detalles de Venta #{ventaSeleccionada.id_venta}
-                    </h2>
-                    <button
-                      onClick={imprimirComprobante}
-                      className="px-5 py-2.5 bg-white text-indigo-600 hover:bg-gray-100 rounded-lg font-medium flex items-center gap-2 transition-colors"
-                    >
-                      <FiPrinter />
-                      Imprimir Comprobante
-                    </button>
+                {productosEnVenta.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-300">
+                    <ShoppingBag size={36} strokeWidth={1.5} />
+                    <p className="text-sm font-semibold text-slate-400">Sin productos</p>
+                    <p className="text-xs text-slate-300">Escanea un QR para agregar prendas</p>
                   </div>
-                </div>
-
-                <div className="p-6 space-y-6">
-                  {/* INFORMACIÓN DE LA VENTA */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 rounded-xl p-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Fecha y Hora</p>
-                      <p className="font-medium">{formatFecha(ventaSeleccionada.fecha)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Método de Pago</p>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        ventaSeleccionada.metodo_pago === "efectivo"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}>
-                        {ventaSeleccionada.metodo_pago}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Vendedor</p>
-                      <p className="font-medium">{ventaSeleccionada.nombre_usuario}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Cliente</p>
-                      <p className="font-medium">
-                        {ventaSeleccionada.cliente_nombre} {ventaSeleccionada.cliente_apellido}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* PRODUCTOS DE LA VENTA */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                      Productos ({ventaSeleccionada.detalles?.length || 0})
-                    </h3>
-                    <div className="border border-gray-200 rounded-lg divide-y max-h-80 overflow-y-auto">
-                      {ventaSeleccionada.detalles?.map((d, index) => (
-                        <div key={d.id_detalle || index} className="p-4 hover:bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-medium text-gray-800">{d.nombre_producto}</h4>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {d.categoria && (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                                    {d.categoria}
-                                  </span>
-                                )}
-                                {d.color && (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                                    {d.color}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm text-gray-600">
-                                {d.cantidad || 1} × Bs {Number(d.precio).toFixed(2)}
-                              </p>
-                              <p className="font-bold text-gray-800 text-lg">
-                                Bs {((d.cantidad || 1) * d.precio).toFixed(2)}
-                              </p>
-                            </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1 custom-scroll">
+                    {productosEnVenta.map((p) => (
+                      <div key={p.id_producto} className="flex items-center gap-3 bg-slate-50 rounded-xl px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-slate-700 truncate">{p.descripcion}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-slate-400">{fmtBs(p.precio)} c/u</span>
+                            <StockBadge stock={p.stock} />
                           </div>
                         </div>
-                      ))}
-                    </div>
+                        {/* Cantidad */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => cambiarCantidad(p.id_producto, p.cantidad - 1)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:border-[#003087] hover:text-[#003087] flex items-center justify-center transition-colors"
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <span className="w-7 text-center text-sm font-bold text-slate-700">{p.cantidad}</span>
+                          <button
+                            onClick={() => cambiarCantidad(p.id_producto, p.cantidad + 1)}
+                            disabled={p.cantidad >= p.stock}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 hover:border-[#003087] hover:text-[#003087] flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
+                        {/* Subtotal */}
+                        <span className="text-sm font-black text-[#003087] w-20 text-right shrink-0">
+                          {fmtBs(p.precio * p.cantidad)}
+                        </span>
+                        {/* Eliminar */}
+                        <button
+                          onClick={() => eliminarProducto(p.id_producto)}
+                          className="text-slate-300 hover:text-[#C8102E] transition-colors shrink-0"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
+                )}
 
-                  {/* TOTAL */}
-                  <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-6">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xl font-bold text-white">Total Final</span>
-                      <span className="text-3xl font-bold text-white">
-                        Bs {Number(ventaSeleccionada.total).toFixed(2)}
-                      </span>
+                {/* Total + confirmar */}
+                {productosEnVenta.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-sm font-semibold text-slate-500">Total a cobrar</span>
+                      <span className="text-2xl font-black text-[#003087]">{fmtBs(total)}</span>
                     </div>
+                    <button
+                      onClick={confirmarVenta}
+                      disabled={procesando}
+                      className="w-full flex items-center justify-center gap-2 bg-[#003087] hover:bg-[#002266] disabled:opacity-60 text-white font-black rounded-xl py-3 text-sm transition-colors shadow-md shadow-[#003087]/20"
+                    >
+                      {procesando ? (
+                        <>
+                          <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          Procesando…
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          Confirmar Venta
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-slate-400 text-center">
+                      Campos requeridos: CI, Nombre y Apellido del cliente
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Panel derecho: historial + comprobante ─── */}
+        <div className="xl:col-span-2 space-y-4">
+
+          {/* Historial reciente */}
+          {ability.can("read", "Venta") && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-gradient-to-r from-[#FFCD00] via-[#003087] to-[#C8102E]" />
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-slate-100">
+                  <ClipboardList size={14} className="text-slate-600" />
+                </div>
+                <h2 className="font-bold text-slate-700 text-sm">Ventas Recientes</h2>
+                <span className="ml-auto text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                  {ventas.length} registros
+                </span>
+              </div>
+
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="relative w-8 h-8">
+                    <div className="absolute inset-0 rounded-full border-3 border-slate-100" />
+                    <div className="absolute inset-0 rounded-full border-3 border-t-[#003087] border-r-[#FFCD00] border-b-[#C8102E] border-l-transparent animate-spin" style={{ borderWidth: 3 }} />
+                  </div>
+                  <p className="text-xs text-slate-400">Cargando…</p>
+                </div>
+              ) : ventas.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-300">
+                  <ShoppingCart size={32} strokeWidth={1.5} />
+                  <p className="text-xs font-semibold text-slate-400">Sin ventas registradas</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto custom-scroll">
+                  {ventas.map((v) => (
+                    <div
+                      key={v.id_venta}
+                      className={`px-4 py-3 hover:bg-slate-50/80 transition-colors cursor-pointer ${ventaSeleccionada?.id_venta === v.id_venta ? "bg-blue-50/60 border-l-2 border-[#003087]" : "border-l-2 border-transparent"}`}
+                      onClick={() => verVenta(v.id_venta)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-xs font-black text-slate-700">#{v.id_venta}</span>
+                            <MetodoBadge metodo={v.metodo_pago} />
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">{v.nombre_usuario} · {fmtFecha(v.fecha)}</p>
+                        </div>
+                        <span className="text-sm font-black text-[#003087] shrink-0">{fmtBs(v.total)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Comprobante / Detalle de venta */}
+          {ventaSeleccionada && (
+            <div id="panel-comprobante" className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="h-1 w-full bg-[#003087]" />
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-[#003087]">
+                    <ShoppingCart size={14} className="text-white" />
+                  </div>
+                  <h2 className="font-bold text-slate-700 text-sm">Venta #{ventaSeleccionada.id_venta}</h2>
+                </div>
+                <button
+                  onClick={imprimirComprobante}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <Printer size={13} />
+                  Imprimir
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Info venta */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Fecha", value: fmtFecha(ventaSeleccionada.fecha) },
+                    { label: "Método", value: <MetodoBadge metodo={ventaSeleccionada.metodo_pago} /> },
+                    { label: "Vendedor", value: ventaSeleccionada.nombre_usuario },
+                    { label: "Cliente", value: `${ventaSeleccionada.cliente_nombre || ""} ${ventaSeleccionada.cliente_apellido || ""}`.trim() || "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-slate-50 rounded-xl px-3 py-2.5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+                      <p className="text-xs font-semibold text-slate-700">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Productos */}
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Productos ({ventaSeleccionada.detalles?.length || 0})
+                  </p>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scroll">
+                    {ventaSeleccionada.detalles?.map((d, i) => (
+                      <div key={d.id_detalle || i} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{d.nombre_producto}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {d.categoria && <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md">{d.categoria}</span>}
+                            {d.color && <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md">{d.color}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[10px] text-slate-400">{d.cantidad || 1} × {fmtBs(d.precio)}</p>
+                          <p className="text-xs font-black text-[#003087]">{fmtBs((d.cantidad || 1) * d.precio)}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                {/* COMPROBANTE OCULTO */}
-                <div className="hidden">
-                  <ComprobanteVenta ref={comprobanteRef} venta={ventaSeleccionada} />
+                {/* Total */}
+                <div className="flex items-center justify-between bg-[#003087] rounded-xl px-4 py-3">
+                  <span className="text-sm font-bold text-white/70">Total</span>
+                  <span className="text-lg font-black text-white">{fmtBs(ventaSeleccionada.total)}</span>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* FOOTER */}
-        <div className="text-center text-gray-500 text-sm py-6">
-          <p>Sistema de Ventas • {new Date().getFullYear()} • Versión 1.0</p>
+              {/* Comprobante oculto para imprimir */}
+              <div className="hidden">
+                <ComprobanteVenta ref={comprobanteRef} venta={ventaSeleccionada} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,48,135,0.15); border-radius: 10px; }
+      ` }} />
     </div>
   );
 };

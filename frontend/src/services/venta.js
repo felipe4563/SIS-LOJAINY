@@ -31,3 +31,11 @@ export const eliminarVenta = async (id) => {
   const { data } = await api.delete(`/venta/${id}`);
   return data;
 };
+
+// ==========================
+// BUSCAR CLIENTE POR CI
+// ==========================
+export const buscarClientePorCI = async (ci) => {
+  const { data } = await api.get(`/venta/cliente/${encodeURIComponent(ci)}`);
+  return data;
+};

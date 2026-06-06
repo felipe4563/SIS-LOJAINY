@@ -174,14 +174,15 @@ export const actualizarProducto = async (req, res) => {
 
         for (const imgNombre of imagenesEliminar) {
           if (imgNombre && typeof imgNombre === 'string') {
-            // Eliminar de la base de datos
+            // path.basename prevents path traversal (e.g. "../../app.js" → "app.js" not found)
+            const safeFilename = path.basename(imgNombre);
+
             await db.query(
               "DELETE FROM producto_imagenes WHERE id_producto = ? AND imagen = ?",
-              [id_producto, imgNombre]
+              [id_producto, safeFilename]
             );
 
-            // Eliminar archivo físico
-            const imgPath = path.join(__dirname, "../uploads/productos", imgNombre);
+            const imgPath = path.join(__dirname, "../uploads/productos", safeFilename);
             if (fs.existsSync(imgPath)) {
               fs.unlinkSync(imgPath);
               console.log(`Imagen eliminada: ${imgNombre}`);
@@ -269,10 +270,7 @@ export const actualizarProducto = async (req, res) => {
 
   } catch (error) {
     console.error("Error al actualizar producto:", error);
-    res.status(500).json({
-      message: "Error al actualizar producto",
-      error: error.message
-    });
+    res.status(500).json({ message: "Error al actualizar producto" });
   }
 };
 

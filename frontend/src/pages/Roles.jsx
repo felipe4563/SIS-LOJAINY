@@ -1,306 +1,371 @@
-// src/pages/Roles.jsx
-import React, { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext } from "react";
 import { AbilityContext } from "../context/AbilityContext";
 import {
-  listarRoles,
-  crearRol,
-  actualizarRol,
-  eliminarRol,
-  obtenerRol,
-  listarPermisos
+  listarRoles, crearRol, actualizarRol, eliminarRol,
+  obtenerRol, listarPermisos,
 } from "../services/rol";
+import {
+  ShieldCheck, Shield, Plus, Pencil, Trash2, ArrowLeft,
+  Save, Check, CheckSquare, Square, AlertTriangle, X,
+} from "lucide-react";
 
 const Roles = () => {
   const ability = useContext(AbilityContext);
 
-  const [roles, setRoles] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // Modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingRol, setEditingRol] = useState(null);
-
-  // Formulario
-  const [nombre, setNombre] = useState("");
-  const [permisos, setPermisos] = useState([]); // array de id_permiso
+  const [roles, setRoles]                     = useState([]);
+  const [loading, setLoading]                 = useState(false);
+  const [formOpen, setFormOpen]               = useState(false);
+  const [editingRol, setEditingRol]           = useState(null);
+  const [nombre, setNombre]                   = useState("");
+  const [permisos, setPermisos]               = useState([]);
   const [permisosDisponibles, setPermisosDisponibles] = useState([]);
+  const [submitting, setSubmitting]           = useState(false);
+  const [confirmar, setConfirmar]             = useState(null); // { id, nombre }
+  const [eliminando, setEliminando]           = useState(false);
+  const [error, setError]                     = useState("");
+  const [exito, setExito]                     = useState("");
+
+  const mostrarError = (msg) => { setError(msg); setTimeout(() => setError(""), 4000); };
+  const mostrarExito = (msg) => { setExito(msg); setTimeout(() => setExito(""), 3000); };
 
   useEffect(() => {
     if (ability.can("manage", "Rol")) {
       cargarRoles();
       cargarPermisos();
     }
-  }, [ability]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cargarRoles = async () => {
     setLoading(true);
     try {
-      const data = await listarRoles();
-      setRoles(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      setRoles(await listarRoles());
+    } catch { mostrarError("Error al cargar roles"); }
+    finally { setLoading(false); }
   };
 
   const cargarPermisos = async () => {
     try {
-      const data = await listarPermisos();
-      setPermisosDisponibles(data);
-    } catch (err) {
-      console.error("Error al cargar permisos:", err);
-    }
+      setPermisosDisponibles(await listarPermisos());
+    } catch { mostrarError("Error al cargar permisos"); }
   };
 
-  const abrirModalCrear = () => {
+  const abrirCrear = () => {
     setEditingRol(null);
     setNombre("");
     setPermisos([]);
-    setModalOpen(true);
+    setFormOpen(true);
   };
 
-  const abrirModalEditar = async (id_rol) => {
+  const abrirEditar = async (id_rol) => {
     try {
       const rol = await obtenerRol(id_rol);
       setEditingRol(rol.id_rol);
       setNombre(rol.nombre);
       setPermisos(rol.permisos.map((p) => p.id_permiso));
-      setModalOpen(true);
-    } catch (err) {
-      console.error(err);
-      alert("Error al obtener rol");
-    }
+      setFormOpen(true);
+    } catch { mostrarError("Error al obtener el rol"); }
   };
 
   const guardarRol = async () => {
-    if (!nombre.trim()) return alert("Debe ingresar un nombre de rol");
-    if (permisos.length === 0) return alert("Debe asignar al menos un permiso");
-
-    const datos = { nombre, permisos };
-
+    if (!nombre.trim())      return mostrarError("Debe ingresar un nombre de rol");
+    if (!permisos.length)    return mostrarError("Debe asignar al menos un permiso");
+    setSubmitting(true);
     try {
       if (editingRol) {
-        await actualizarRol(editingRol, datos);
+        await actualizarRol(editingRol, { nombre, permisos });
+        mostrarExito("Rol actualizado correctamente");
       } else {
-        await crearRol(datos);
+        await crearRol({ nombre, permisos });
+        mostrarExito("Rol creado correctamente");
       }
-      setModalOpen(false);
+      setFormOpen(false);
       cargarRoles();
-    } catch (err) {
-      console.error(err);
-      alert("Error al guardar rol");
-    }
+    } catch { mostrarError("Error al guardar el rol"); }
+    finally { setSubmitting(false); }
   };
 
-  const eliminar = async (id_rol) => {
-    if (!window.confirm("¿Está seguro de eliminar este rol? Esta acción no se puede deshacer.")) return;
+  const handleEliminar = async () => {
+    if (!confirmar) return;
+    setEliminando(true);
     try {
-      await eliminarRol(id_rol);
+      await eliminarRol(confirmar.id);
+      mostrarExito(`Rol "${confirmar.nombre}" eliminado`);
+      setConfirmar(null);
       cargarRoles();
-    } catch (err) {
-      console.error(err);
-      alert("Error al eliminar rol. Es posible que el rol esté asignado a usuarios.");
-    }
+    } catch {
+      mostrarError("Error al eliminar. El rol puede estar asignado a usuarios.");
+      setConfirmar(null);
+    } finally { setEliminando(false); }
   };
 
-  const togglePermiso = (id_permiso) => {
+  const togglePermiso = (id) =>
     setPermisos((prev) =>
-      prev.includes(id_permiso)
-        ? prev.filter((p) => p !== id_permiso)
-        : [...prev, id_permiso]
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
     );
-  };
 
-  // Agrupar permisos por módulo (ej: 'productos.create' -> grupo 'productos')
+  // Agrupar por módulo: 'productos.create' → { productos: [...] }
   const permisosAgrupados = permisosDisponibles.reduce((acc, p) => {
-    const [modulo, accion] = p.nombre.split('.');
+    const [modulo, accion] = p.nombre.split(".");
     if (!acc[modulo]) acc[modulo] = [];
     acc[modulo].push({ ...p, accion });
     return acc;
   }, {});
 
+  /* ── Acceso denegado ───────────────────────────────────────────── */
   if (!ability.can("manage", "Rol")) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-        <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
-          <span className="text-4xl">🔒</span>
+      <div className="flex items-center justify-center py-24">
+        <div className="max-w-sm w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
+          <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-7 h-7 text-[#C8102E]" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-1">Acceso Denegado</h3>
+          <p className="text-slate-500 text-sm">No tienes permisos para gestionar roles.</p>
         </div>
-        <h2 className="text-2xl font-bold text-slate-800">Acceso Restringido</h2>
-        <p className="text-slate-500 mt-2">No tienes permisos para gestionar roles.</p>
       </div>
     );
   }
 
+  /* ── Render principal ──────────────────────────────────────────── */
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in pb-20 sm:pb-0">
-      {!modalOpen ? (
+    <div className="space-y-5 pb-20 sm:pb-0 animate-fade-in">
+
+      {/* Banners auto-dismiss */}
+      {error && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium animate-fade-in">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError("")} className="hover:text-red-900 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {exito && (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm font-medium animate-fade-in">
+          <Check className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{exito}</span>
+          <button onClick={() => setExito("")} className="hover:text-emerald-900 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {!formOpen ? (
         <>
-          {/* Header de la sección */}
-          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[#003087] tracking-tight">Gestión de Roles y Permisos</h2>
-              <p className="text-slate-500 text-xs sm:text-sm mt-1">Crea roles y asigna niveles de acceso para tus usuarios.</p>
+          {/* ── Header ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#003087] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[#003087] tracking-tight leading-tight">
+                  Roles y Permisos
+                </h2>
+                <p className="text-slate-500 text-xs sm:text-sm">
+                  {roles.length} {roles.length === 1 ? "rol registrado" : "roles registrados"}
+                </p>
+              </div>
             </div>
             <button
-              onClick={abrirModalCrear}
-              className="flex justify-center items-center gap-2 bg-[#FFCD00] hover:bg-[#e6b800] text-[#003087] font-bold px-5 py-3 sm:py-2.5 rounded-xl shadow-md shadow-[#FFCD00]/20 transition-all active:scale-95 w-full sm:w-auto"
+              onClick={abrirCrear}
+              className="flex items-center justify-center gap-2 bg-[#FFCD00] hover:bg-[#e6b800] text-[#003087] font-bold px-5 py-3 sm:py-2.5 rounded-xl shadow-sm shadow-[#FFCD00]/30 transition-all active:scale-95 w-full sm:w-auto"
             >
-              <span>➕</span>
-              <span>Nuevo Rol</span>
+              <Plus className="w-4 h-4" />
+              Nuevo Rol
             </button>
           </div>
 
-          {/* LISTA DE ROLES */}
+          {/* ── Lista ── */}
           {loading ? (
             <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#003087]"></div>
+              <div className="w-8 h-8 border-2 border-[#003087] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : roles.length === 0 ? (
+            <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Shield className="w-7 h-7 text-slate-400" />
+              </div>
+              <p className="text-slate-500 text-sm font-medium">No hay roles registrados.</p>
+              <p className="text-slate-400 text-xs mt-1">Crea uno nuevo para comenzar.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {roles.map((rol) => (
-                <div key={rol.id_rol} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                  {/* Adorno superior azul */}
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#003087]"></div>
-
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#003087]/5 text-[#003087] flex items-center justify-center text-xl sm:text-2xl font-bold border border-[#003087]/10 shrink-0">
-                        {rol.nombre.charAt(0).toUpperCase()}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {roles.map((rol, idx) => (
+                <div
+                  key={rol.id_rol}
+                  className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden animate-fade-in"
+                  style={{ animationDelay: `${idx * 45}ms` }}
+                >
+                  <div className="h-1.5 bg-[#003087]" />
+                  <div className="p-5">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-11 h-11 rounded-xl bg-[#003087]/5 border border-[#003087]/10 flex items-center justify-center shrink-0">
+                        <span className="text-lg font-extrabold text-[#003087] leading-none">
+                          {rol.nombre.charAt(0).toUpperCase()}
+                        </span>
                       </div>
-                      <div className="overflow-hidden">
-                        <h3 className="text-base sm:text-lg font-bold text-slate-800 capitalize truncate">{rol.nombre}</h3>
-                        <p className="text-xs text-slate-500 font-medium">ID: {rol.id_rol}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-slate-800 capitalize truncate">{rol.nombre}</h3>
+                        <span className="text-xs text-slate-400 font-medium">ID #{rol.id_rol}</span>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="mt-5 sm:mt-6 flex items-center gap-2">
-                    <button
-                      onClick={() => abrirModalEditar(rol.id_rol)}
-                      className="flex-1 bg-slate-50 hover:bg-[#003087]/5 text-[#003087] border border-slate-200 hover:border-[#003087]/30 py-2.5 sm:py-2 rounded-lg text-sm font-bold transition-colors"
-                    >
-                      Editar Permisos
-                    </button>
-                    <button
-                      onClick={() => eliminar(rol.id_rol)}
-                      className="w-11 h-11 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-100 rounded-lg transition-colors"
-                      title="Eliminar Rol"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => abrirEditar(rol.id_rol)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-2 rounded-xl text-xs font-bold text-[#003087] bg-[#003087]/5 hover:bg-[#003087]/10 border border-[#003087]/15 hover:border-[#003087]/30 transition-all"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Editar Permisos
+                      </button>
+                      <button
+                        onClick={() => setConfirmar({ id: rol.id_rol, nombre: rol.nombre })}
+                        className="w-10 h-10 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center rounded-xl text-red-500 bg-red-50 hover:bg-red-500 hover:text-white border border-red-100 transition-all"
+                        title="Eliminar rol"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
-              {roles.length === 0 && (
-                <div className="col-span-full py-10 sm:py-12 text-center text-slate-500 bg-slate-50 rounded-2xl border border-slate-200 border-dashed mx-2 sm:mx-0">
-                  <span className="block text-3xl mb-2">📋</span>
-                  <p className="text-sm sm:text-base">No hay roles registrados. Crea uno nuevo para comenzar.</p>
-                </div>
-              )}
             </div>
           )}
         </>
       ) : (
-        /* VISTA FORMULARIO CREAR / EDITAR (INLINE) */
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-          {/* Header del formulario */}
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-4 bg-slate-50">
-            <button 
-              onClick={() => setModalOpen(false)} 
-              className="w-10 h-10 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0"
-              title="Volver a la lista"
+        /* ── Formulario inline ── */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
+
+          {/* Header del form */}
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center gap-3">
+            <button
+              onClick={() => setFormOpen(false)}
+              className="w-9 h-9 rounded-xl hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0"
+              title="Volver"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              <ArrowLeft className="w-4 h-4" />
             </button>
-            <div>
-              <h3 className="text-xl font-bold text-slate-800">
-                {editingRol ? "Editar Rol" : "Crear Nuevo Rol"}
-              </h3>
-              <p className="text-sm text-slate-500 font-medium">Configura el nombre y los permisos de acceso.</p>
+            <div className="w-8 h-8 rounded-lg bg-[#003087] flex items-center justify-center shrink-0">
+              {editingRol
+                ? <Pencil className="w-3.5 h-3.5 text-white" />
+                : <Plus className="w-3.5 h-3.5 text-white" />
+              }
             </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-slate-800 text-sm sm:text-base leading-tight">
+                {editingRol ? "Editar Rol" : "Nuevo Rol"}
+              </h3>
+              <p className="text-xs text-slate-400 hidden sm:block">Nombre y permisos de acceso</p>
+            </div>
+            {permisos.length > 0 && (
+              <span className="shrink-0 text-xs font-bold bg-[#003087]/10 text-[#003087] px-2.5 py-1 rounded-lg">
+                {permisos.length} permisos
+              </span>
+            )}
           </div>
 
-          {/* Cuerpo del formulario */}
-          <div className="p-6">
-            {/* Campo de Nombre */}
-            <div className="mb-8">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Nombre del Rol <span className="text-red-500">*</span></label>
+          {/* Cuerpo */}
+          <div className="p-5 space-y-6">
+
+            {/* Nombre */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Nombre del Rol <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
-                placeholder="Ej: Administrador, Cajero..."
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
-                className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#003087] focus:border-[#003087] transition-all text-slate-800 font-medium"
+                placeholder="Ej: Administrador, Cajero, Vendedor…"
+                maxLength={80}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#003087]/25 focus:border-[#003087] transition-all"
               />
             </div>
 
-            {/* Lista de Permisos */}
+            {/* Permisos agrupados */}
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-base font-bold text-slate-800">Permisos del Sistema</h4>
-                <span className="text-xs font-bold bg-[#003087]/10 text-[#003087] px-2.5 py-1 rounded-md">
-                  {permisos.length} seleccionados
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Permisos del Sistema <span className="text-red-500">*</span>
+                </label>
+                <span className="text-xs text-slate-400 font-medium">
+                  {permisos.length} / {permisosDisponibles.length} seleccionados
                 </span>
               </div>
-              
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                {Object.entries(permisosAgrupados).map(([modulo, perms], index) => {
-                  const todosSeleccionados = perms.every(p => permisos.includes(p.id_permiso));
-                  
-                  const toggleAllModulo = () => {
-                    if (todosSeleccionados) {
-                      setPermisos(prev => prev.filter(id => !perms.some(p => p.id_permiso === id)));
+
+              <div className="rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                {Object.entries(permisosAgrupados).map(([modulo, perms]) => {
+                  const todosOn  = perms.every((p) => permisos.includes(p.id_permiso));
+                  const algunoOn = perms.some((p) => permisos.includes(p.id_permiso));
+
+                  const toggleModulo = () => {
+                    if (todosOn) {
+                      setPermisos((prev) => prev.filter((id) => !perms.some((p) => p.id_permiso === id)));
                     } else {
-                      const nuevosIds = perms.map(p => p.id_permiso).filter(id => !permisos.includes(id));
-                      setPermisos(prev => [...prev, ...nuevosIds]);
+                      const nuevos = perms.map((p) => p.id_permiso).filter((id) => !permisos.includes(id));
+                      setPermisos((prev) => [...prev, ...nuevos]);
                     }
                   };
 
                   return (
-                    <div 
-                      key={modulo} 
-                      className={`flex flex-col sm:flex-row sm:items-center p-4 gap-4 transition-colors ${index !== 0 ? 'border-t border-slate-100' : ''} hover:bg-slate-50`}
+                    <div
+                      key={modulo}
+                      className={`p-4 transition-colors ${
+                        todosOn ? "bg-[#003087]/[0.03]" : algunoOn ? "bg-amber-50/40" : "bg-white"
+                      }`}
                     >
-                      {/* Izquierda: Nombre del módulo y botón todos */}
-                      <div className="w-full sm:w-1/3 flex flex-row sm:flex-col items-center sm:items-start justify-between sm:justify-start gap-2 shrink-0">
-                        <span className="font-bold text-slate-800 capitalize text-sm flex items-center gap-2">
-                          {modulo}
-                        </span>
-                        <button 
-                          onClick={toggleAllModulo}
-                          className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${todosSeleccionados ? 'bg-[#003087] text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      {/* Cabecera del módulo */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-700 capitalize">{modulo}</span>
+                          {todosOn && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#003087] text-white">
+                              COMPLETO
+                            </span>
+                          )}
+                          {!todosOn && algunoOn && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                              PARCIAL
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={toggleModulo}
+                          className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                            todosOn
+                              ? "bg-[#003087] text-white hover:bg-[#002266]"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
                         >
-                          {todosSeleccionados ? 'DESMARCAR' : 'MARCAR TODO'}
+                          {todosOn
+                            ? <CheckSquare className="w-3 h-3" />
+                            : <Square className="w-3 h-3" />
+                          }
+                          {todosOn ? "Desmarcar" : "Marcar todo"}
                         </button>
                       </div>
-                      
-                      {/* Derecha: Checkboxes */}
-                      <div className="flex-1 flex flex-wrap gap-2 sm:gap-3">
+
+                      {/* Chips de permisos */}
+                      <div className="flex flex-wrap gap-2">
                         {perms.map((p) => {
-                          const isChecked = permisos.includes(p.id_permiso);
+                          const on = permisos.includes(p.id_permiso);
                           return (
-                            <label
+                            <button
                               key={p.id_permiso}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                togglePermiso(p.id_permiso);
-                              }}
-                              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all border select-none ${
-                                isChecked 
-                                ? 'bg-[#003087]/5 border-[#003087] text-[#003087]' 
-                                : 'bg-white border-slate-200 hover:border-slate-300 text-slate-600'
+                              onClick={() => togglePermiso(p.id_permiso)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all select-none ${
+                                on
+                                  ? "bg-[#003087] text-white border-[#003087] shadow-sm"
+                                  : "bg-white text-slate-600 border-slate-200 hover:border-[#003087]/40 hover:text-[#003087]"
                               }`}
                             >
-                              <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${
-                                isChecked ? 'bg-[#003087] border-[#003087] text-white' : 'bg-white border-slate-300'
-                              }`}>
-                                {isChecked && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                              </div>
-                              <span className={`text-xs sm:text-sm ${isChecked ? 'font-bold' : 'font-medium'}`}>
-                                {p.accion.charAt(0).toUpperCase() + p.accion.slice(1)}
-                              </span>
-                            </label>
+                              {on
+                                ? <Check className="w-3 h-3 shrink-0" />
+                                : <div className="w-3 h-3 rounded border border-current shrink-0 opacity-50" />
+                              }
+                              {p.accion.charAt(0).toUpperCase() + p.accion.slice(1)}
+                            </button>
                           );
                         })}
                       </div>
@@ -311,34 +376,74 @@ const Roles = () => {
             </div>
           </div>
 
-          {/* Footer del formulario */}
-          <div className="px-6 py-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-end gap-3 bg-slate-50 shrink-0">
+          {/* Footer del form */}
+          <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/80 flex flex-col-reverse sm:flex-row justify-end gap-2.5">
             <button
-              onClick={() => setModalOpen(false)}
-              className="w-full sm:w-auto px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-colors"
+              onClick={() => setFormOpen(false)}
+              className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-colors text-sm w-full sm:w-auto"
             >
               Cancelar
             </button>
             <button
               onClick={guardarRol}
-              className="w-full sm:w-auto px-6 py-2.5 bg-[#003087] hover:bg-[#002266] text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2"
+              disabled={submitting}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#003087] hover:bg-[#002266] disabled:opacity-60 text-white font-bold rounded-xl shadow-sm transition-all active:scale-95 text-sm w-full sm:w-auto"
             >
-              <span>Guardar Rol</span>
+              {submitting ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {submitting ? "Guardando…" : "Guardar Rol"}
             </button>
           </div>
         </div>
       )}
 
-      {/* Estilos para animación */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      {/* ── Modal de confirmación eliminar ── */}
+      {confirmar && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in p-6">
+            <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-6 h-6 text-[#C8102E]" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 text-center mb-1">¿Eliminar rol?</h3>
+            <p className="text-slate-500 text-sm text-center mb-5">
+              El rol{" "}
+              <span className="font-bold text-slate-700">"{confirmar.nombre}"</span>{" "}
+              será eliminado permanentemente. Si está asignado a usuarios no podrá completarse.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmar(null)}
+                disabled={eliminando}
+                className="flex-1 py-2.5 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEliminar}
+                disabled={eliminando}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#C8102E] hover:bg-red-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all text-sm"
+              >
+                {eliminando ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                {eliminando ? "Eliminando…" : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-          animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
+        .animate-fade-in { animation: fadeIn 0.25s cubic-bezier(0.16,1,0.3,1) both; }
       `}} />
     </div>
   );

@@ -15,18 +15,21 @@ export const login = async (req, res) => {
       [identificador, identificador]
     );
 
-    if (users.length === 0)
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (users.length === 0) {
+      // Constant-time dummy compare to prevent timing attacks
+      await bcrypt.compare(password, '$2b$10$invalidhashtopreventtimingattackxxxxxxxxxxxxxxxxxxxxxxx');
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
+    }
 
     const user = users[0];
 
-    if (user.activo === 0)
-      return res.status(403).json({ message: 'Usuario desactivado' });
-
-    // 2. Verificar password
+    // 2. Verificar password antes de revelar si el usuario está activo
     const match = await bcrypt.compare(password, user.password);
     if (!match)
-      return res.status(401).json({ message: 'Contraseña incorrecta' });
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
+
+    if (user.activo === 0)
+      return res.status(403).json({ message: 'Tu cuenta está desactivada. Contacta al administrador.' });
 
     // 3. Obtener permisos del rol
     const [permisosRows] = await db.query(

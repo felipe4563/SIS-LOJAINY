@@ -1,10 +1,10 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { authMiddleware } from './middlewares/authMiddleware.js';
 import authRoutes from './routes/auth.routes.js';
 import usuarioRoutes from './routes/user.routes.js';
 import rolRoutes from './routes/rol.routes.js';
@@ -14,21 +14,25 @@ import dashboardRoutes from './routes/dashboard.routes.js'
 import reporteRoutes from './routes/reporte.routes.js'
 import catalogoRoutes from './routes/catalogo.routes.js'
 import atributosRoutes from './routes/atributos.route.js'
+import perfilRoutes    from './routes/perfil.routes.js'
 
 dotenv.config();
 const app = express();
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://boutique.lojainy.com',  
+  'https://boutique.lojainy.com',
 ];
+
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving /uploads images
+}));
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permite requests sin origen (Postman, cURL)
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -39,18 +43,9 @@ app.use(
   })
 );
 
-
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Middleware para inicializar Ability CASL en cada request
-app.use((req, res, next) => {
-  if (req.user && req.user.permisos) {
-    req.ability = defineAbilitiesFor(req.user.permisos);
-  }
-  next();
-});
 
 // Rutas
 app.use('/api/auth', authRoutes);
@@ -62,6 +57,7 @@ app.use('/api/venta', ventaRoutes);
 app.use('/api/reportes', reporteRoutes);
 app.use('/api/catalogo', catalogoRoutes);
 app.use('/api/atributos', atributosRoutes);
+app.use('/api/perfil',   perfilRoutes);
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

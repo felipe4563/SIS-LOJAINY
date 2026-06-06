@@ -2,198 +2,409 @@ import { useEffect, useState } from "react";
 import ReporteVentasPDF from "../pages/Reporte/ReportesVentasPDF";
 import { obtenerReporteVentas } from "../services/reporte";
 import { obtenerUsuarios } from "../services/usuario";
+import {
+  Search,
+  FileDown,
+  ShoppingBag,
+  DollarSign,
+  Users,
+  Award,
+  Banknote,
+  QrCode,
+  Package,
+  Calendar,
+  TrendingUp,
+} from "lucide-react";
 
+// ── Helpers ────────────────────────────────────────────────
+const hoy = new Date();
+const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split("T")[0];
+const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split("T")[0];
+
+const fmtBs = (v) =>
+  "Bs " + Number(v || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtFecha = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+};
+const fmtHora = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+};
+
+// ── Derivar estadísticas de prendas ───────────────────────
+const calcularTopPrendas = (ventas) => {
+  const stats = {};
+  ventas.forEach((v) => {
+    v.productos.forEach((p) => {
+      if (!stats[p.producto]) {
+        stats[p.producto] = { nombre: p.producto, cantidad: 0, total: 0, vendedores: {} };
+      }
+      stats[p.producto].cantidad += Number(p.cantidad);
+      stats[p.producto].total   += Number(p.precio) * Number(p.cantidad);
+      stats[p.producto].vendedores[v.vendedor] =
+        (stats[p.producto].vendedores[v.vendedor] || 0) + Number(p.cantidad);
+    });
+  });
+  return Object.values(stats).sort((a, b) => b.cantidad - a.cantidad);
+};
+
+// ── Sub-components ─────────────────────────────────────────
+const StatCard = ({ label, value, sub, Icon, accent, iconBg, iconColor }) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div className={`h-1 w-full ${accent}`} />
+    <div className="p-4 flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+        <p className="text-xl font-black text-slate-800 mt-1.5 leading-none truncate">{value}</p>
+        {sub && <p className="text-xs text-slate-400 mt-1 truncate">{sub}</p>}
+      </div>
+      <div className={`${iconBg} p-2.5 rounded-xl shrink-0`}>
+        <Icon size={18} className={iconColor} />
+      </div>
+    </div>
+  </div>
+);
+
+const Label = ({ children }) => (
+  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+    {children}
+  </label>
+);
+
+const InputField = ({ children }) => (
+  <div className="[&>select]:w-full [&>select]:border [&>select]:border-slate-200 [&>select]:rounded-xl [&>select]:px-3 [&>select]:py-2.5 [&>select]:text-sm [&>select]:text-slate-700 [&>select]:bg-white [&>select]:focus:outline-none [&>select]:focus:ring-2 [&>select]:focus:ring-[#003087]/20 [&>select]:focus:border-[#003087] [&>select]:transition-colors [&>input]:w-full [&>input]:border [&>input]:border-slate-200 [&>input]:rounded-xl [&>input]:px-3 [&>input]:py-2.5 [&>input]:text-sm [&>input]:text-slate-700 [&>input]:focus:outline-none [&>input]:focus:ring-2 [&>input]:focus:ring-[#003087]/20 [&>input]:focus:border-[#003087] [&>input]:transition-colors">
+    {children}
+  </div>
+);
+
+const MetodoBadge = ({ metodo }) => {
+  const styles = {
+    efectivo: "bg-green-50 text-green-700 border border-green-100",
+    qr:       "bg-blue-50 text-[#003087] border border-blue-100",
+  };
+  const icons = { efectivo: <Banknote size={11} />, qr: <QrCode size={11} /> };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${styles[metodo] || "bg-slate-100 text-slate-500"}`}>
+      {icons[metodo]} {metodo}
+    </span>
+  );
+};
+
+// ── Main ───────────────────────────────────────────────────
 const Reportes = () => {
-  const [ventas, setVentas] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // 📅 fechas por defecto: mes actual
-  const hoy = new Date();
-  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
-  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-    .toISOString()
-    .split("T")[0];
-
-  const [filtros, setFiltros] = useState({
-    metodo_pago: "",
-    id_usuario: "",
-    fecha_inicio: primerDiaMes,
-    fecha_fin: ultimoDiaMes
+  const [ventas, setVentas]         = useState([]);
+  const [usuarios, setUsuarios]     = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [filtroProducto, setFiltroProducto] = useState("");
+  const [filtros, setFiltros]       = useState({
+    metodo_pago:  "",
+    id_usuario:   "",
+    fecha_inicio: primerDia,
+    fecha_fin:    ultimoDia,
   });
 
-  // 🔁 cargar reporte
   const cargarReporte = async (params) => {
     try {
       setLoading(true);
       const { data } = await obtenerReporteVentas(params);
       setVentas(data);
-    } catch (error) {
-      console.error("Error al cargar reporte", error);
+    } catch (e) {
+      console.error("Error al cargar reporte", e);
     } finally {
       setLoading(false);
     }
   };
 
-  // 🚀 inicial
   useEffect(() => {
-    const cargarTodo = async () => {
+    const init = async () => {
       try {
         setLoading(true);
-        const [reporteRes, usuariosRes] = await Promise.all([
-          obtenerReporteVentas({
-            metodo_pago: null,
-            id_usuario: null,
-            fecha_inicio: primerDiaMes,
-            fecha_fin: ultimoDiaMes
-          }),
-          obtenerUsuarios()
+        const [rRes, uRes] = await Promise.all([
+          obtenerReporteVentas({ metodo_pago: null, id_usuario: null, fecha_inicio: primerDia, fecha_fin: ultimoDia }),
+          obtenerUsuarios(),
         ]);
-
-        setVentas(reporteRes.data);
-        setUsuarios(usuariosRes.data);
-      } catch (error) {
-        console.error("Error inicial de reportes", error);
+        setVentas(rRes.data);
+        setUsuarios(uRes.data);
+      } catch (e) {
+        console.error(e);
       } finally {
         setLoading(false);
       }
     };
-
-    cargarTodo();
+    init();
   }, []);
 
-  const buscarReporte = () => {
+  const buscar = () =>
     cargarReporte({
-      metodo_pago: filtros.metodo_pago || null,
-      id_usuario: filtros.id_usuario || null,
+      metodo_pago:  filtros.metodo_pago  || null,
+      id_usuario:   filtros.id_usuario   || null,
       fecha_inicio: filtros.fecha_inicio,
-      fecha_fin: filtros.fecha_fin
+      fecha_fin:    filtros.fecha_fin,
     });
-  };
 
-  // 💰 total general (1 vez por venta)
-  const totalGeneral = ventas.reduce(
-    (acc, v) => acc + Number(v.total || 0),
-    0
-  );
+  // ── Filtro de producto (client-side) ──────────────────
+  const productosUnicos = [...new Set(
+    ventas.flatMap((v) => v.productos.map((p) => p.producto))
+  )].sort();
+
+  const ventasFiltradas = filtroProducto
+    ? ventas
+        .map((v) => ({ ...v, productos: v.productos.filter((p) => p.producto === filtroProducto) }))
+        .filter((v) => v.productos.length > 0)
+    : ventas;
+
+  // ── Derived stats ──────────────────────────────────────
+  const totalGeneral    = ventasFiltradas.reduce((a, v) => a + Number(v.total || 0), 0);
+  const totalProductos  = ventasFiltradas.reduce((a, v) => a + v.productos.length, 0);
+  const topPrendas      = calcularTopPrendas(ventasFiltradas);
+  const topPrenda       = topPrendas[0] || null;
+  const topVendedorPrenda = topPrenda
+    ? Object.entries(topPrenda.vendedores).sort((a, b) => b[1] - a[1])[0]
+    : null;
+
+  const vendedoresUnicos = new Set(ventasFiltradas.map((v) => v.vendedor)).size;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-blue-50 p-4 md:p-6">
-      {/* Encabezado con colores de Colombia */}
-      <div className="mb-6 md:mb-8">
-        <div className="h-2 bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 rounded-t-lg"></div>
-        <div className="bg-white p-4 md:p-6 rounded-b-lg shadow-lg">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center">
-            <span className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white p-2 rounded-lg mr-3">
-              📊
-            </span>
-            Reporte de Ventas
-          </h1>
-          <p className="text-gray-600 mt-2">Visualiza y filtra el historial de ventas de tu negocio</p>
+    <div className="space-y-5">
+
+      {/* ── Header ─────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Reportes de Ventas</h1>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {fmtFecha(filtros.fecha_inicio)} — {fmtFecha(filtros.fecha_fin)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-2 rounded-xl">
+          <Calendar size={14} />
+          <span>{ventasFiltradas.length} ventas encontradas</span>
         </div>
       </div>
 
-      {/* Contenedor principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Panel de filtros */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-lg p-4 md:p-5 border-l-4 border-blue-600 sticky top-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-              <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-2">
-                🔍
+      {/* ── Stat cards ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          label="Total General"
+          value={fmtBs(totalGeneral)}
+          Icon={DollarSign}
+          accent="bg-[#FFCD00]"
+          iconBg="bg-yellow-50"
+          iconColor="text-yellow-500"
+        />
+        <StatCard
+          label="Nº de Ventas"
+          value={ventas.length}
+          sub={`${totalProductos} productos`}
+          Icon={ShoppingBag}
+          accent="bg-[#003087]"
+          iconBg="bg-blue-50"
+          iconColor="text-[#003087]"
+        />
+        <StatCard
+          label="Vendedores"
+          value={vendedoresUnicos}
+          sub="activos en el período"
+          Icon={Users}
+          accent="bg-[#C8102E]"
+          iconBg="bg-red-50"
+          iconColor="text-[#C8102E]"
+        />
+        <StatCard
+          label="Prenda Líder"
+          value={topPrenda ? topPrenda.cantidad + " uds." : "—"}
+          sub={topPrenda ? topPrenda.nombre : "Sin ventas"}
+          Icon={TrendingUp}
+          accent="bg-slate-700"
+          iconBg="bg-slate-50"
+          iconColor="text-slate-500"
+        />
+      </div>
+
+      {/* ── Prenda más vendida ─────────────────────────── */}
+      {topPrenda && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="h-1 w-full bg-gradient-to-r from-[#FFCD00] via-[#003087] to-[#C8102E]" />
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-1.5 rounded-lg bg-[#FFCD00]">
+                <Award size={15} className="text-[#003087]" />
+              </div>
+              <h2 className="font-bold text-slate-700 text-sm">Prenda Más Vendida</h2>
+              <span className="ml-auto text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                En el período seleccionado
               </span>
-              Filtros de Búsqueda
-            </h3>
-            
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Prenda principal */}
+              <div className="md:col-span-1 bg-[#003087] rounded-xl p-4 text-white">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-1">
+                      #1 Más Vendida
+                    </p>
+                    <p className="font-black text-lg leading-tight truncate">{topPrenda.nombre}</p>
+                    <p className="text-[#FFCD00] font-black text-2xl mt-2">{topPrenda.cantidad} <span className="text-sm font-semibold text-white/70">unidades</span></p>
+                    <p className="text-white/60 text-xs mt-1">{fmtBs(topPrenda.total)} facturado</p>
+                  </div>
+                  <div className="bg-[#FFCD00] p-2 rounded-lg shrink-0">
+                    <Package size={20} className="text-[#003087]" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Top vendedores de esa prenda */}
+              <div className="md:col-span-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+                  Quién la vendió más
+                </p>
+                <div className="space-y-2">
+                  {Object.entries(topPrenda.vendedores)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 4)
+                    .map(([vendedor, qty], i) => {
+                      const pct = Math.round((qty / topPrenda.cantidad) * 100);
+                      const isTop = i === 0;
+                      return (
+                        <div key={vendedor} className="flex items-center gap-3">
+                          <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 ${isTop ? "bg-[#FFCD00] text-[#003087]" : "bg-slate-100 text-slate-500"}`}>
+                            {i + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-sm font-semibold truncate ${isTop ? "text-slate-800" : "text-slate-600"}`}>
+                                {vendedor}
+                              </span>
+                              <span className="text-xs font-bold text-slate-500 ml-2 shrink-0">{qty} uds · {pct}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${isTop ? "bg-[#003087]" : "bg-slate-300"}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* Top 5 prendas tabla compacta */}
+            {topPrendas.length > 1 && (
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+                  Ranking de Prendas
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {topPrendas.slice(0, 6).map((prenda, i) => (
+                    <div key={prenda.nombre} className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-3 py-2.5">
+                      <span className={`text-[10px] font-black w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${i === 0 ? "bg-[#FFCD00] text-[#003087]" : "bg-slate-200 text-slate-500"}`}>
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-700 truncate">{prenda.nombre}</p>
+                        <p className="text-[10px] text-slate-400">{prenda.cantidad} uds · {fmtBs(prenda.total)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Filters + Table ────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+
+        {/* Filter panel */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sticky top-6">
+            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-slate-100">
+              <div className="p-1.5 rounded-lg bg-[#003087]">
+                <Search size={14} className="text-white" />
+              </div>
+              <h3 className="font-bold text-slate-700 text-sm">Filtros</h3>
+            </div>
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Método de Pago
-                </label>
-                <select
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  value={filtros.metodo_pago}
-                  onChange={(e) =>
-                    setFiltros({ ...filtros, metodo_pago: e.target.value })
-                  }
-                >
-                  <option value="">Todos los pagos</option>
-                  <option value="efectivo">Efectivo</option>
-                  <option value="qr">QR</option>
-                </select>
+                <Label>Método de Pago</Label>
+                <InputField>
+                  <select value={filtros.metodo_pago} onChange={(e) => setFiltros({ ...filtros, metodo_pago: e.target.value })}>
+                    <option value="">Todos</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="qr">QR</option>
+                  </select>
+                </InputField>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vendedor
-                </label>
-                <select
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  value={filtros.id_usuario}
-                  onChange={(e) =>
-                    setFiltros({ ...filtros, id_usuario: e.target.value })
-                  }
-                >
-                  <option value="">Todos los vendedores</option>
-                  {usuarios.map((u) => (
-                    <option key={u.id_usuario} value={u.id_usuario}>
-                      {u.nombre} {u.apellido}
-                    </option>
-                  ))}
-                </select>
+                <Label>Vendedor</Label>
+                <InputField>
+                  <select value={filtros.id_usuario} onChange={(e) => setFiltros({ ...filtros, id_usuario: e.target.value })}>
+                    <option value="">Todos</option>
+                    {usuarios.map((u) => (
+                      <option key={u.id_usuario} value={u.id_usuario}>
+                        {u.nombre} {u.apellido}
+                      </option>
+                    ))}
+                  </select>
+                </InputField>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha Inicio
-                </label>
-                <input
-                  type="date"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  value={filtros.fecha_inicio}
-                  onChange={(e) =>
-                    setFiltros({ ...filtros, fecha_inicio: e.target.value })
-                  }
-                />
+                <Label>Producto</Label>
+                <InputField>
+                  <select
+                    value={filtroProducto}
+                    onChange={(e) => setFiltroProducto(e.target.value)}
+                  >
+                    <option value="">Todos los productos</option>
+                    {productosUnicos.map((nombre) => (
+                      <option key={nombre} value={nombre}>{nombre}</option>
+                    ))}
+                  </select>
+                </InputField>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha Fin
-                </label>
-                <input
-                  type="date"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  value={filtros.fecha_fin}
-                  onChange={(e) =>
-                    setFiltros({ ...filtros, fecha_fin: e.target.value })
-                  }
-                />
+                <Label>Fecha Inicio</Label>
+                <InputField>
+                  <input type="date" value={filtros.fecha_inicio} onChange={(e) => setFiltros({ ...filtros, fecha_inicio: e.target.value })} />
+                </InputField>
+              </div>
+
+              <div>
+                <Label>Fecha Fin</Label>
+                <InputField>
+                  <input type="date" value={filtros.fecha_fin} onChange={(e) => setFiltros({ ...filtros, fecha_fin: e.target.value })} />
+                </InputField>
               </div>
 
               <button
-                onClick={buscarReporte}
-                className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-white font-bold rounded-lg p-3 hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center"
+                onClick={buscar}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 bg-[#003087] hover:bg-[#002266] disabled:opacity-60 text-white font-bold rounded-xl py-2.5 text-sm transition-colors"
               >
-                <span className="mr-2">🔎</span>
-                Buscar Reporte
+                <Search size={15} />
+                Buscar
               </button>
 
-              {/* Botón PDF */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="text-sm text-gray-600 mb-2">Exportar reporte:</div>
-                <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-all">
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Exportar</p>
+                <div className="[&>button]:w-full [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:gap-2 [&>button]:bg-[#C8102E] [&>button]:hover:bg-red-700 [&>button]:text-white [&>button]:font-bold [&>button]:rounded-xl [&>button]:py-2.5 [&>button]:text-sm [&>button]:transition-colors">
                   <ReporteVentasPDF
                     ventas={ventas}
                     filtros={{
                       metodo_pago: filtros.metodo_pago,
-                      vendedor:
-                        usuarios.find(u => u.id_usuario == filtros.id_usuario)
-                          ?.nombre || "",
+                      vendedor: usuarios.find((u) => u.id_usuario == filtros.id_usuario)?.nombre || "",
                       fecha_inicio: filtros.fecha_inicio,
-                      fecha_fin: filtros.fecha_fin
+                      fecha_fin: filtros.fecha_fin,
                     }}
                   />
                 </div>
@@ -202,183 +413,101 @@ const Reportes = () => {
           </div>
         </div>
 
-        {/* Panel de resultados */}
+        {/* Results table */}
         <div className="lg:col-span-3">
-          {/* Tarjeta de resumen */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-lg p-5 mb-6">
-            <div className="flex flex-col md:flex-row justify-between items-center">
-              <div>
-                <h3 className="text-xl font-bold">Resumen del Reporte</h3>
-                <p className="text-blue-100">
-                  {new Date(filtros.fecha_inicio).toLocaleDateString()} - {new Date(filtros.fecha_fin).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="mt-4 md:mt-0 text-center md:text-right">
-                <div className="text-3xl font-bold">Bs {totalGeneral.toFixed(2)}</div>
-                <div className="text-blue-100">Total General</div>
-              </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-700 text-sm">Detalle de Ventas</h3>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                {ventasFiltradas.length} resultados
+              </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-              <div className="bg-blue-500 bg-opacity-30 p-3 rounded-lg">
-                <div className="text-sm">Total Ventas</div>
-                <div className="text-lg font-bold">{ventas.length}</div>
+
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="relative w-10 h-10">
+                  <div className="absolute inset-0 rounded-full border-4 border-slate-100" />
+                  <div className="absolute inset-0 rounded-full border-4 border-t-[#003087] border-r-[#FFCD00] border-b-[#C8102E] border-l-transparent animate-spin" />
+                </div>
+                <p className="text-sm text-slate-400">Cargando reporte…</p>
               </div>
-              <div className="bg-yellow-500 bg-opacity-30 p-3 rounded-lg">
-                <div className="text-sm">Productos Vendidos</div>
-                <div className="text-lg font-bold">
-                  {ventas.reduce((acc, v) => acc + v.productos.length, 0)}
+            ) : ventasFiltradas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-300">
+                <Package size={40} strokeWidth={1.5} />
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-slate-400">Sin resultados</p>
+                  <p className="text-xs text-slate-300">Intenta con otros filtros de búsqueda</p>
                 </div>
               </div>
-              <div className="bg-red-500 bg-opacity-30 p-3 rounded-lg">
-                <div className="text-sm">Vendedores</div>
-                <div className="text-lg font-bold">
-                  {new Set(ventas.map(v => v.vendedor)).size}
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50">
+                        {["Fecha", "Vendedor", "Prenda", "Método", "Subtotal", "Total Venta"].map((h) => (
+                          <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {ventasFiltradas.map((v) =>
+                        v.productos.map((p, idx) => (
+                          <tr
+                            key={`${v.id_venta}-${idx}`}
+                            className="hover:bg-slate-50/80 transition-colors"
+                          >
+                            {idx === 0 && (
+                              <td rowSpan={v.productos.length} className="px-4 py-3 border-l-2 border-transparent align-top">
+                                <p className="font-semibold text-slate-700 whitespace-nowrap">{fmtFecha(v.fecha)}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{fmtHora(v.fecha)}</p>
+                              </td>
+                            )}
+                            {idx === 0 && (
+                              <td rowSpan={v.productos.length} className="px-4 py-3 align-top">
+                                <p className="font-semibold text-slate-700 whitespace-nowrap">{v.vendedor}</p>
+                              </td>
+                            )}
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-700">{p.producto}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {p.cantidad} × {fmtBs(p.precio)}
+                              </p>
+                            </td>
+                            {idx === 0 && (
+                              <td rowSpan={v.productos.length} className="px-4 py-3 align-top">
+                                <MetodoBadge metodo={v.metodo_pago} />
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-right font-semibold text-slate-600 whitespace-nowrap">
+                              {fmtBs(Number(p.precio) * Number(p.cantidad))}
+                            </td>
+                            {idx === 0 && (
+                              <td rowSpan={v.productos.length} className="px-4 py-3 text-right align-top">
+                                <span className="font-black text-[#003087] whitespace-nowrap">{fmtBs(v.total)}</span>
+                              </td>
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          {/* 📋 TABLA DE RESULTADOS */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="px-4 md:px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                <span className="bg-yellow-100 text-yellow-600 p-2 rounded-lg mr-2">
-                  📋
-                </span>
-                Detalle de Ventas
-              </h3>
-              <div className="text-sm text-gray-500">
-                Mostrando {ventas.length} resultados
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                  <tr>
-                    <th className="p-4 text-left font-semibold text-gray-700">Fecha</th>
-                    <th className="p-4 text-left font-semibold text-gray-700">Vendedor</th>
-                    <th className="p-4 text-left font-semibold text-gray-700">Producto</th>
-                    <th className="p-4 text-left font-semibold text-gray-700">Método</th>
-                    <th className="p-4 text-left font-semibold text-gray-700">Subtotal</th>
-                    <th className="p-4 text-left font-semibold text-gray-700">Total Venta</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="6" className="p-8 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mb-4"></div>
-                          <div className="text-gray-600">Cargando reporte...</div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : ventas.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="p-8 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="text-4xl mb-4">📭</div>
-                          <div className="text-gray-600 text-lg font-medium mb-2">
-                            No hay resultados
-                          </div>
-                          <div className="text-gray-500">
-                            Intenta con otros filtros de búsqueda
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    ventas.map((v) =>
-                      v.productos.map((p, index) => (
-                        <tr
-                          key={`${v.id_venta}-${index}`}
-                          className={`hover:bg-yellow-50 transition-colors ${
-                            index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
-                          }`}
-                        >
-                          {index === 0 && (
-                            <td rowSpan={v.productos.length} className="p-4 border-t border-gray-200">
-                              <div className="font-medium">{new Date(v.fecha).toLocaleDateString()}</div>
-                              <div className="text-sm text-gray-500">
-                                {new Date(v.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                              </div>
-                            </td>
-                          )}
-
-                          {index === 0 && (
-                            <td rowSpan={v.productos.length} className="p-4 border-t border-gray-200">
-                              <div className="font-medium">{v.vendedor}</div>
-                            </td>
-                          )}
-
-                          <td className="p-4 border-t border-gray-200">
-                            <div className="font-medium">{p.producto}</div>
-                            <div className="text-sm text-gray-500">
-                              Cantidad: {p.cantidad} × Bs {p.precio.toFixed(2)}
-                            </div>
-                          </td>
-
-                          {index === 0 && (
-                            <td
-                              rowSpan={v.productos.length}
-                              className="p-4 border-t border-gray-200"
-                            >
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                v.metodo_pago === 'efectivo' 
-                                  ? 'bg-green-100 text-green-800'
-                                  : v.metodo_pago === 'qr'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {v.metodo_pago.toUpperCase()}
-                              </span>
-                            </td>
-                          )}
-
-                          <td className="p-4 border-t border-gray-200 font-medium text-right">
-                            Bs {(p.precio * p.cantidad).toFixed(2)}
-                          </td>
-
-                          {index === 0 && (
-                            <td
-                              rowSpan={v.productos.length}
-                              className="p-4 border-t border-gray-200 font-bold text-right"
-                            >
-                              <div className="text-blue-700">Bs {Number(v.total).toFixed(2)}</div>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 💰 TOTAL AL FINAL */}
-            {!loading && ventas.length > 0 && (
-              <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 p-5">
-                <div className="flex flex-col md:flex-row justify-between items-center">
-                  <div className="text-gray-600 mb-2 md:mb-0">
-                    {ventas.length} ventas procesadas
-                  </div>
-                  <div className="text-xl font-bold text-gray-800">
-                    Total General: <span className="text-yellow-600">Bs {totalGeneral.toFixed(2)}</span>
+                {/* Footer total */}
+                <div className="flex items-center justify-between px-5 py-4 bg-slate-50 border-t border-slate-100">
+                  <p className="text-xs text-slate-400 font-semibold">
+                    {ventasFiltradas.length} ventas · {totalProductos} productos
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">Total General</span>
+                    <span className="text-base font-black text-[#003087]">{fmtBs(totalGeneral)}</span>
                   </div>
                 </div>
-              </div>
+              </>
             )}
-          </div>
-
-          {/* Nota al pie */}
-          <div className="mt-6 text-center text-gray-500 text-sm">
-            <p>
-              Reporte generado con los colores de <span className="font-bold text-yellow-600">Col</span>
-              <span className="font-bold text-blue-600">om</span>
-              <span className="font-bold text-red-600">bia</span> 🇨🇴
-            </p>
           </div>
         </div>
       </div>
