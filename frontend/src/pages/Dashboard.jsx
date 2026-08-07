@@ -4,7 +4,7 @@ import {
   obtenerVentasPorVendedor,
   obtenerProductosMasVendidos,
   obtenerResumenInventario,
-} from "../services/dashboard";
+} from "../services/Dashboard";
 import {
   Chart as ChartJS,
   CategoryScale,
