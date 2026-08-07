@@ -15,42 +15,24 @@ export const reporteVentas = async (req, res) => {
       });
     }
 
-    const [rows] = await db.query(
+    // 1️⃣ Cabecera de cada venta que cae dentro del filtro
+    const [ventas] = await db.query(
       `
-      SELECT
+      SELECT DISTINCT
         v.id_venta,
         v.fecha,
         v.metodo_pago,
         v.total,
-        CONCAT(u.nombre, ' ', u.apellido) AS vendedor,
-
-        GROUP_CONCAT(
-          CONCAT(
-            p.id_producto, '|',
-            REPLACE(p.descripcion, '|', ''), '|',
-            dv.precio, '|',
-            dv.cantidad
-          )
-          SEPARATOR ';;'
-        ) AS productos
-
+        CONCAT(u.nombre, ' ', u.apellido) AS vendedor
       FROM ventas v
       INNER JOIN usuarios u ON v.id_usuario = u.id_usuario
       INNER JOIN detalle_venta dv ON v.id_venta = dv.id_venta
-      INNER JOIN productos p ON dv.id_producto = p.id_producto
       WHERE
         (? IS NULL OR v.metodo_pago = ?)
       AND
         (? IS NULL OR v.id_usuario = ?)
       AND
         DATE(v.fecha) BETWEEN ? AND ?
-      GROUP BY
-        v.id_venta,
-        v.fecha,
-        v.metodo_pago,
-        v.total,
-        u.nombre,
-        u.apellido
       ORDER BY v.fecha DESC
       `,
       [
@@ -60,20 +42,41 @@ export const reporteVentas = async (req, res) => {
       ]
     );
 
-    // 🧠 Convertir productos a JSON real
-    const data = rows.map(v => ({
+    // 2️⃣ Líneas de producto de esas ventas, en una sola consulta aparte
+    //    (evita empaquetar los datos como texto delimitado, que se rompía
+    //    si una descripción contenía '|' o ';;')
+    const productosPorVenta = new Map();
+    if (ventas.length > 0) {
+      const idsVenta = ventas.map(v => v.id_venta);
+      const [detalles] = await db.query(
+        `
+        SELECT
+          dv.id_venta,
+          p.id_producto,
+          p.descripcion AS producto,
+          dv.precio,
+          dv.cantidad
+        FROM detalle_venta dv
+        INNER JOIN productos p ON dv.id_producto = p.id_producto
+        WHERE dv.id_venta IN (?)
+        `,
+        [idsVenta]
+      );
+
+      for (const d of detalles) {
+        if (!productosPorVenta.has(d.id_venta)) productosPorVenta.set(d.id_venta, []);
+        productosPorVenta.get(d.id_venta).push({
+          id_producto: d.id_producto,
+          producto: d.producto,
+          precio: Number(d.precio),
+          cantidad: Number(d.cantidad)
+        });
+      }
+    }
+
+    const data = ventas.map(v => ({
       ...v,
-      productos: v.productos
-        ? v.productos.split(';;').map(item => {
-            const [id_producto, producto, precio, cantidad] = item.split('|');
-            return {
-              id_producto: Number(id_producto),
-              producto,
-              precio: Number(precio),
-              cantidad: Number(cantidad)
-            };
-          })
-        : []
+      productos: productosPorVenta.get(v.id_venta) || []
     }));
 
     res.json(data);

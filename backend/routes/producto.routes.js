@@ -11,6 +11,8 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { initAbility } from "../middlewares/initAbility.js";
 import { checkAbility } from "../middlewares/checkAbility.js";
 import { uploadProductos } from "../config/upload.js";
+import { validate } from "../middlewares/validate.js";
+import { crearProductoSchema, actualizarProductoSchema } from "../schemas/producto.schema.js";
 
 const router = express.Router();
 
@@ -43,6 +45,7 @@ router.post(
   initAbility,
   checkAbility("create", "Producto"),
   uploadProductos.array("imagenes", 10),
+  validate(crearProductoSchema),
   crearProducto
 );
 
@@ -53,6 +56,7 @@ router.put(
   initAbility,
   checkAbility("update", "Producto"),
   uploadProductos.array("imagenes", 10),
+  validate(actualizarProductoSchema),
   actualizarProducto
 );
 

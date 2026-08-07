@@ -4,6 +4,8 @@ import { crearVenta, listarVentas, obtenerVenta, eliminarVenta, buscarClientePor
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { initAbility } from "../middlewares/initAbility.js";
 import { checkAbility } from "../middlewares/checkAbility.js";
+import { validate } from "../middlewares/validate.js";
+import { crearVentaSchema } from "../schemas/venta.schema.js";
 
 const router = express.Router();
 
@@ -16,6 +18,7 @@ router.get(
   "/cliente/:ci",
   authMiddleware,
   initAbility,
+  checkAbility("read", "Cliente"),
   buscarClientePorCI
 );
 
@@ -43,6 +46,7 @@ router.post(
   authMiddleware,
   initAbility,
   checkAbility("create", "Venta"),
+  validate(crearVentaSchema),
   crearVenta
 );
 

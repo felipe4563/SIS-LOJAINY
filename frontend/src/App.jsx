@@ -20,7 +20,15 @@ import Perfil from "./pages/Perfil";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
-  const { usuario } = useContext(AuthContext);
+  const { usuario, cargandoSesion } = useContext(AuthContext);
+
+  if (cargandoSesion) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="h-10 w-10 rounded-full border-4 border-[#003087] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <Routes>

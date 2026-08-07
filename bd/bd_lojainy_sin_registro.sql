@@ -115,6 +115,7 @@ INSERT INTO `permisos` (`id_permiso`, `nombre`) VALUES
 (12, 'usuarios.manage'),
 (8, 'ventas.create'),
 (17, 'ventas.delete'),
+(18, 'ventas.manage'),
 (9, 'ventas.read');
 
 -- --------------------------------------------------------
@@ -201,6 +202,7 @@ INSERT INTO `rol_permisos` (`id_rol`, `id_permiso`) VALUES
 (1, 14),
 (1, 15),
 (1, 16),
+(1, 18),
 (2, 5),
 (2, 8),
 (2, 9),
@@ -401,7 +403,7 @@ ALTER TABLE `marcas`
 -- AUTO_INCREMENT de la tabla `permisos`
 --
 ALTER TABLE `permisos`
-  MODIFY `id_permiso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id_permiso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT de la tabla `productos`
@@ -489,3 +491,19 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- --------------------------------------------------------
+
+--
+-- Migración: agrega el permiso 'ventas.manage' faltante y lo asigna al rol
+-- administrador. Ya viene incluido en el volcado de arriba (id_permiso 18),
+-- pero se deja aquí también para bases de datos existentes que se creen a
+-- partir de una copia previa de este dump y no lo tengan.
+-- No fuerza el id_permiso: deja que AUTO_INCREMENT le asigne uno libre,
+-- por si en esa base de datos el id 18 ya está ocupado por otra cosa.
+--
+
+INSERT IGNORE INTO `permisos` (`nombre`) VALUES ('ventas.manage');
+
+INSERT IGNORE INTO `rol_permisos` (`id_rol`, `id_permiso`)
+SELECT 1, `id_permiso` FROM `permisos` WHERE `nombre` = 'ventas.manage';

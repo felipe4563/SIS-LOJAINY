@@ -4,17 +4,9 @@ import db from '../config/db.js';
  * Crear venta con detalles
  */
 export const crearVenta = async (req, res) => {
-  const { metodo_pago, total, detalles, cliente } = req.body;
+  // req.body ya viene validado por crearVentaSchema (metodo_pago, detalles, cliente)
+  const { metodo_pago, detalles, cliente } = req.body;
   const id_usuario = req.user.id_usuario;
-
-  const METODOS_VALIDOS = ['efectivo', 'qr'];
-  if (!METODOS_VALIDOS.includes(metodo_pago)) {
-    return res.status(400).json({ message: 'Método de pago inválido' });
-  }
-
-  if (!Array.isArray(detalles) || detalles.length === 0) {
-    return res.status(400).json({ message: "Debe enviar al menos un producto" });
-  }
 
   const conn = await db.getConnection();
   try {
@@ -39,21 +31,14 @@ export const crearVenta = async (req, res) => {
       }
     }
 
-    // 2️⃣ Insertar venta
-    const [ventaResult] = await conn.query(
-      `INSERT INTO ventas (id_usuario, id_cliente, metodo_pago, total) VALUES (?, ?, ?, ?)`,
-      [id_usuario, id_cliente, metodo_pago, total]
-    );
-
-    const id_venta = ventaResult.insertId;
-
-    // 3️⃣ Insertar detalle de venta y reducir stock
+    // 2️⃣ Verificar stock y calcular precios/total desde la BD (nunca confiar en el cliente)
+    let total = 0;
+    const lineas = [];
     for (let item of detalles) {
-      const { id_producto, precio, cantidad = 1 } = item;
+      const { id_producto, cantidad = 1 } = item;
 
-      // Verify stock before reducing (prevents negative stock)
       const [stockRows] = await conn.query(
-        `SELECT stock FROM productos WHERE id_producto = ? FOR UPDATE`,
+        `SELECT stock, precio FROM productos WHERE id_producto = ? FOR UPDATE`,
         [id_producto]
       );
       if (!stockRows.length) {
@@ -65,14 +50,29 @@ export const crearVenta = async (req, res) => {
         return res.status(400).json({ message: `Stock insuficiente para el producto ${id_producto}` });
       }
 
+      const precio = stockRows[0].precio;
+      total += Number(precio) * Number(cantidad);
+      lineas.push({ id_producto, precio, cantidad });
+    }
+
+    // 3️⃣ Insertar venta con el total calculado en el servidor
+    const [ventaResult] = await conn.query(
+      `INSERT INTO ventas (id_usuario, id_cliente, metodo_pago, total) VALUES (?, ?, ?, ?)`,
+      [id_usuario, id_cliente, metodo_pago, total]
+    );
+
+    const id_venta = ventaResult.insertId;
+
+    // 4️⃣ Insertar detalle de venta y reducir stock
+    for (let linea of lineas) {
       await conn.query(
         `INSERT INTO detalle_venta (id_venta, id_producto, precio, cantidad) VALUES (?, ?, ?, ?)`,
-        [id_venta, id_producto, precio, cantidad]
+        [id_venta, linea.id_producto, linea.precio, linea.cantidad]
       );
 
       await conn.query(
         `UPDATE productos SET stock = stock - ? WHERE id_producto = ?`,
-        [cantidad, id_producto]
+        [linea.cantidad, linea.id_producto]
       );
     }
 

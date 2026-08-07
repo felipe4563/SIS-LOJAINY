@@ -5,14 +5,8 @@ import bcrypt from 'bcrypt';
  * Crear usuario
  */
 export const crearUsuario = async (req, res) => {
-  const { nombre, apellido, usuario, ci, correo, password, id_rol, activo = 1 } = req.body;
-
-  if (!nombre?.trim() || !usuario?.trim() || !correo?.trim() || !password || !id_rol) {
-    return res.status(400).json({ message: 'Nombre, usuario, correo, contraseña y rol son requeridos' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
-  }
+  // req.body ya viene validado por crearUsuarioSchema
+  const { nombre, apellido, usuario, ci, correo, password, id_rol, activo } = req.body;
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -20,7 +14,7 @@ export const crearUsuario = async (req, res) => {
     const [result] = await db.query(
       `INSERT INTO usuarios (nombre, apellido, usuario, ci, correo, password, id_rol, activo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nombre.trim(), apellido?.trim() || null, usuario.trim(), ci?.trim() || null, correo.trim(), hashedPassword, id_rol, activo]
+      [nombre, apellido || null, usuario, ci || null, correo, hashedPassword, id_rol, activo]
     );
 
     res.status(201).json({ message: 'Usuario creado', id_usuario: result.insertId });
@@ -76,11 +70,12 @@ export const obtenerUsuario = async (req, res) => {
  */
 export const actualizarUsuario = async (req, res) => {
   const { id } = req.params;
+  // req.body ya viene validado por actualizarUsuarioSchema
   const { nombre, apellido, usuario, ci, correo, password, id_rol } = req.body;
 
   try {
     let query = 'UPDATE usuarios SET nombre = ?, apellido = ?, usuario = ?, ci = ?, correo = ?, id_rol = ?';
-    const params = [nombre, apellido, usuario, ci, correo, id_rol];
+    const params = [nombre, apellido || null, usuario, ci || null, correo, id_rol];
 
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -96,6 +91,11 @@ export const actualizarUsuario = async (req, res) => {
     res.json({ message: 'Usuario actualizado' });
   } catch (err) {
     console.error(err);
+    if (err.code === 'ER_DUP_ENTRY') {
+      if (err.sqlMessage?.includes('usuario')) return res.status(409).json({ message: 'Ese nombre de usuario ya está en uso' });
+      if (err.sqlMessage?.includes('correo'))  return res.status(409).json({ message: 'Ese correo ya está registrado' });
+      if (err.sqlMessage?.includes('ci'))      return res.status(409).json({ message: 'Esa cédula ya está registrada' });
+    }
     res.status(500).json({ message: 'Error al actualizar usuario' });
   }
 };

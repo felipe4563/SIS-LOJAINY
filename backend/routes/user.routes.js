@@ -10,6 +10,8 @@ import {
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { initAbility } from '../middlewares/initAbility.js';
 import { checkAbility } from '../middlewares/checkAbility.js';
+import { validate } from '../middlewares/validate.js';
+import { crearUsuarioSchema, actualizarUsuarioSchema } from '../schemas/usuario.schema.js';
 
 const router = Router();
 
@@ -19,6 +21,7 @@ router.post(
   authMiddleware,
   initAbility,
   checkAbility('manage', 'Usuario'),
+  validate(crearUsuarioSchema),
   crearUsuario
 );
 
@@ -46,6 +49,7 @@ router.put(
   authMiddleware,
   initAbility,
   checkAbility('manage', 'Usuario'),
+  validate(actualizarUsuarioSchema),
   actualizarUsuario
 );
 
